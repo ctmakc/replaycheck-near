@@ -19,7 +19,7 @@
   --stamp:#002FA7; --stamp-ink:#F4F6FF; --delivered:#1D7A46; --refund:#C81E1E; --wait:#B98A14;
   --display:"Barlow Semi Condensed",ui-sans-serif,system-ui,sans-serif; --body:"Barlow",ui-sans-serif,system-ui,sans-serif; --mono:"Fragment Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --t-xs:clamp(.78rem,.74rem + .2vw,.86rem); --t-base:clamp(1rem,.96rem + .2vw,1.1rem); --t-lg:clamp(1.25rem,1.1rem + .8vw,1.65rem);
-  --t-xl:clamp(2rem,1.5rem + 2.5vw,3.2rem); --t-hero:clamp(2.5rem,1.3rem + 3.6vw,4.5rem);
+  --t-xl:clamp(2rem,1.5rem + 2.5vw,3.2rem); --t-hero:clamp(2.4rem,1.2rem + 3.2vw,3.9rem);
   --gutter:clamp(1rem,.8rem + 1.2vw,2rem); --row:clamp(1.1rem,1rem + .6vw,1.6rem);
   --ease-mech:cubic-bezier(.2,.9,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
 }
@@ -37,7 +37,7 @@ h1,h2,h3{font-family:var(--display);font-weight:600;line-height:.98;letter-spaci
 .eyebrow b{color:var(--stamp);font-weight:400}
 
 /* ── top bar ───────────────────────────────────────────── */
-.bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--rule)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem 0;border-bottom:1px solid var(--rule)}
 .bar .brand{display:flex;align-items:center;gap:.6rem;white-space:nowrap;font-family:var(--display);font-weight:600;font-size:1.15rem;letter-spacing:-.01em;color:var(--ink);background:none}
 .bar .brand img{width:26px;height:26px}
 .bar nav{display:flex;gap:1.4rem;font-size:.95rem}
@@ -50,11 +50,11 @@ h1,h2,h3{font-family:var(--display);font-weight:600;line-height:.98;letter-spaci
 .hero{display:grid;grid-template-columns:5fr 7fr;gap:var(--gutter);align-items:start;}
 .hero>div,.split>*,.grid>*{min-width:0}
 .hero{padding-block:clamp(2.5rem,2rem + 3vw,5rem) clamp(2rem,1.5rem + 2vw,3.5rem)}
-.hero h1{font-size:var(--t-hero);margin:.6rem 0 1rem;max-width:12ch}
-.hero .lede{font-size:var(--t-lg);line-height:1.35;color:var(--ink);max-width:30ch}
+.hero h1{font-size:var(--t-hero);margin:.5rem 0 .9rem;max-width:12ch}
+.hero .lede{font-size:clamp(1.05rem,1rem + .35vw,1.25rem);line-height:1.4;color:var(--ink);max-width:46ch}
 .hero .lede b{font-weight:500}
-.hero p.note{margin-top:1rem;color:var(--muted);max-width:40ch}
-.cta{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.6rem;align-items:center}
+.hero p.note{margin-top:1.1rem;color:var(--muted);max-width:44ch;font-size:.95rem}
+.cta{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.3rem;align-items:center}
 .btn{display:inline-flex;align-items:center;gap:.6rem;padding:.85rem 1.2rem;border:1px solid var(--ink);background:var(--ink);color:var(--panel);font-family:var(--display);font-weight:600;font-size:1.05rem;letter-spacing:.01em;cursor:pointer;transition:transform .12s var(--ease-mech),background .12s}
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:translateY(1px)}
@@ -152,12 +152,12 @@ footer .credit img{height:18px;width:auto;opacity:.8}
     <p class="eyebrow mask"><span>NEAR Hackathon 2026 · <b>Agent Economy</b> · Autonomous Business</span></p>
     <h1><span class="mask"><span>A QA agent</span></span><span class="mask"><span>that gets paid in Ⓝ</span></span><span class="mask"><span>and pays its suppliers.</span></span></h1>
     <p class="lede mask"><span>ReplayCheck replays your sign-in and checkout in a real browser after every release. <b>The customer escrows the fee on a NEAR contract. The agent rents browser minutes from another agent over HTTP 402. The report hash on-chain releases the payment.</b></span></p>
-    <p class="note mask"><span>Every row on the board to the right is a job on <a id="contractlink" class="mono" href="#">the market contract</a>. The button runs the whole loop with testnet accounts: no wallet needed to watch it.</span></p>
     <div class="cta mask"><span style="display:flex;gap:.75rem;flex-wrap:wrap">
       <button class="btn primary" id="run">Run a paid job <span class="mono">0.05 Ⓝ · testnet</span></button>
       <a class="btn ghost" href="https://github.com/ctmakc/replaycheck-near">Read the code</a>
     </span></div>
     <p class="console" id="console" aria-live="polite"></p>
+    <p class="note mask"><span>Every row on the board to the right is a job on <a id="contractlink" class="mono" href="#">the market contract</a>. The button runs the whole loop with testnet accounts: no wallet needed to watch it.</span></p>
   </div>
   <div>
     <div class="board" id="board" aria-label="Job board">
@@ -361,7 +361,14 @@ near view <span id="c-contract3">market.….testnet</span> get_recent_jobs '{"li
   // ── the demo run ──────────────────────────────────────
   const btn = $('#run'), con = $('#console');
   let lastEvent = Date.now();
-  function say(msg, cls = '') { con.innerHTML = `<span class="${cls}">${msg}</span>`; }
+  // Messages queue up and each stays on screen for at least 1.4 s, so a fast run still reads as steps.
+  const sayQ = []; let saying = false;
+  function say(msg, cls = '') { sayQ.push({ msg, cls }); if (!saying) drainSay(); }
+  function drainSay() {
+    const m = sayQ.shift(); if (!m) { saying = false; return; }
+    saying = true; con.innerHTML = `<span class="${m.cls}">${m.msg}</span>`;
+    setTimeout(drainSay, reduced ? 50 : 1400);
+  }
   async function poll(state) {
     try {
       const evs = await (await fetch(`/v1/events?since=${lastEvent}`)).json();

@@ -46,6 +46,7 @@ customer fetches report.json, hashes it, compares with get_job(job_id).report_ha
 | Report the hash refers to | https://replaycheck-near.mmix.biz/reports/runs/job-2-2026-11-07T02-46-43/index.html · [report.json](https://replaycheck-near.mmix.biz/reports/runs/job-2-2026-11-07T02-46-43/report.json) |
 | Job #1 (earlier run, 1/2 passed: the public test site timed out): accept / deliver | [7Bd2cdVV…SYfy](https://testnet.nearblocks.io/txns/7Bd2cdVVK6Z1eiXma6wznbYbE9RAsxAYueZL4EahSYfy) / [E4hEftit…yQWy](https://testnet.nearblocks.io/txns/E4hEftitVf5GmH4C2RDjSDYwr9cto5SxpEaefgmjyQWy) |
 | Job #0 refunded by the customer while still open | [8Xbju87U…RBDx](https://testnet.nearblocks.io/txns/8Xbju87UFH7EQauWKLd7jtXprXmFJEPdxxjAUpN9RBDx) |
+| Jobs #3 and #4: accepted, then the agent process was restarted mid-run; the customer refunded both after the 15-minute deadline | [7kyEn88J…4pRJ](https://testnet.nearblocks.io/txns/7kyEn88Jo4mMfpzGKAwLSnZnKoaG4TMdiAHCtMpg4pRJ) / [9ccDmiU4…kiPk](https://testnet.nearblocks.io/txns/9ccDmiU4BdGRAtwA7jZS4QS2ZAPnbwat8Nzu3PjekiPk) |
 
 ```sh
 near view market.rc-f44644.testnet get_stats
@@ -56,7 +57,7 @@ On testnet both agents are operated by us; the point is the mechanism. The worke
 
 ## Try it (judge path, free, ~10 minutes)
 
-Prerequisites: Node 22+, internet access to a testnet RPC (default: FastNEAR `test.rpc.fastnear.com` with dRPC as failover; `rpc.testnet.near.org` is deprecated and rate-limits). Optional: a Rust toolchain (`rustup`, target `wasm32-unknown-unknown`) to rebuild the contract; the built wasm is committed. Optional: [Ollama](https://ollama.com) with `qwen2.5:7b-instruct` for plain-language checks; without it the `judge` check in `tasks/demo.json` fails and the run reports 1/2, every other step still works.
+Prerequisites: Node 22+, internet access to a testnet RPC (default: FastNEAR `test.rpc.fastnear.com` with dRPC as failover; `rpc.testnet.near.org` is deprecated and rate-limits). Optional: a Rust toolchain (`rustup`, target `wasm32-unknown-unknown`) to rebuild the contract; the built wasm is committed. Optional: [Ollama](https://ollama.com) for plain-language checks (`OLLAMA_MODEL`, default `qwen2.5:7b-instruct`; a 4B instruct model answers in a few seconds); without it the `judge` check in `tasks/demo.json` fails and the run reports 1/2, every other step still works.
 
 ```sh
 git clone https://github.com/ctmakc/replaycheck-near && cd replaycheck-near

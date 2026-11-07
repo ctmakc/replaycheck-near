@@ -16,15 +16,19 @@ const page = await ctx.newPage();
 const t0 = Date.now();
 const marks = [];
 const mark = (name) => { marks.push({ name, t: Date.now() - t0 }); console.error(`[rec] ${name} @ ${((Date.now() - t0) / 1000).toFixed(1)}s`); };
-const consoleText = () => page.locator('#console').innerText().catch(() => '');
+// Every console message is kept in-page (a MutationObserver), so a fast run cannot skip past a mark.
+async function installLog() {
+  await page.evaluate(() => { window.__log = []; const c = document.querySelector('#console'); new MutationObserver(() => window.__log.push(c.innerText)).observe(c, { childList: true, subtree: true, characterData: true }); });
+}
 async function waitConsole(re, timeout = 6 * 60e3) {
   const t = Date.now();
-  while (Date.now() - t < timeout) { const s = await consoleText(); if (re.test(s)) return s; await page.waitForTimeout(400); }
+  while (Date.now() - t < timeout) { const log = await page.evaluate(() => window.__log || []); if (log.some((s) => re.test(s))) return; await page.waitForTimeout(250); }
   throw new Error('timeout waiting for ' + re);
 }
 
 mark('hero');
 await page.goto(base + '/', { waitUntil: 'networkidle' });
+await installLog();
 await page.waitForTimeout(5000);
 // pointer glide to the button, then click
 await page.mouse.move(700, 500); await page.waitForTimeout(300);

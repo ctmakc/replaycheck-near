@@ -7,3 +7,4 @@ reports/*
 *.log
 contracts/*/target/
 .env.near
+docs/video/out/
