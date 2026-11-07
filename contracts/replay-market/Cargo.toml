@@ -1,0 +1,25 @@
+[package]
+name = "replaycheck-market"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "NEAR contract: escrow market for paid browser-replay jobs plus pay-with-memo receipts for agent-to-agent service calls."
+publish = false
+rust-version = "1.86"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

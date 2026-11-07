@@ -1,31 +1,28 @@
 {
   "name": "replaycheck",
   "version": "0.1.0",
-  "description": "Replays your users' key flows in rented browsers after every release and pays per run in stablecoins on Celo (x402 via buy).",
+  "description": "Replays your users' key flows in rented browsers and settles every step on NEAR: customers escrow jobs on a market contract, the agent pays a browser worker over HTTP 402 (near402).",
   "type": "module",
   "bin": {
     "replaycheck": "bin/replaycheck.js"
   },
   "scripts": {
     "whoami": "node bin/replaycheck.js whoami",
-    "demo": "node bin/replaycheck.js run tasks/demo.json",
-    "demo:sandbox": "REPLAYCHECK_NETWORK=celo-sepolia node bin/replaycheck.js run tasks/demo.json",
-    "register": "node scripts/register-agent.js",
+    "demo": "node bin/replaycheck.js order tasks/demo.json",
     "serve": "node src/server.js",
-    "x402-key": "node scripts/x402-api-key.js",
-    "gate": "buy gate paywall.yml --facilitator https://api.x402.celo.org",
-    "gate:sandbox": "buy --sandbox gate paywall.sandbox.yml --facilitator https://api.x402.sepolia.celo.org"
+    "setup:testnet": "node scripts/near-setup.mjs",
+    "worker": "node worker/server.js",
+    "test": "node --test test/*.test.js",
+    "contract:build": "bash scripts/build-contract.sh",
+    "contract:test": "cd contracts/replay-market && cargo test",
+    "run:local": "node bin/replaycheck.js run tasks/demo.json"
   },
   "engines": {
     "node": ">=22"
   },
   "license": "MIT",
   "dependencies": {
-    "@celo/attribution-tags": "^0.5.0",
-    "@celo/buy-core": "0.8.5",
-    "viem": "^2.57.16"
-  },
-  "devDependencies": {
-    "@celo/buy": "0.8.5"
+    "near-api-js": "^7.4.0",
+    "playwright": "^1.58.0"
   }
 }

@@ -1,36 +1,37 @@
-// Replays recorded user tasks in rented browsers and checks the outcome.
+// Replays one recorded user task in a rented browser and checks the outcome.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RentedBrowser, pickDuration } from './browser.js';
 import { judge } from './judge.js';
-import { network } from './config.js';
 
 const STEP_ACTIONS = new Set(['open', 'click', 'fill', 'type', 'press', 'check', 'uncheck', 'hover', 'focus', 'scroll', 'wait', 'back', 'forward', 'reload']);
 
-async function pageText(b) {
-  try { const out = await b.cmd({ action: 'get', kind: 'text', target: 'body' }); return typeof out === 'string' ? out : out?.data?.text ?? out?.text ?? ''; }
-  catch { return ''; }
-}
 async function getKind(b, kind) {
-  try { const out = await b.cmd({ action: 'get', kind }); return typeof out === 'string' ? out : out?.data?.[kind] ?? out?.[kind] ?? ''; } catch { return ''; }
+  try { const out = await b.cmd({ action: 'get', kind }); return out?.[kind] ?? ''; } catch { return ''; }
 }
 async function shot(b, dir, name) {
   try {
     const out = await b.cmd({ action: 'screenshot' });
-    if (out?.base64) { const f = join(dir, name); writeFileSync(f, Buffer.from(out.base64, 'base64')); return name; }
+    if (out?.base64) { writeFileSync(join(dir, name), Buffer.from(out.base64, 'base64')); return name; }
   } catch {}
   return null;
 }
 
-export async function runTask(task, outDir) {
+/**
+ * @param account  NEAR account that pays the worker for browser minutes and judgement calls
+ * @param task     { id, name, startUrl, steps[], expect[] }
+ * @param outDir   where screenshots go (a sub-folder per task)
+ */
+export async function runTask(account, task, outDir) {
   const dir = join(outDir, task.id);
   mkdirSync(dir, { recursive: true });
-  const result = { id: task.id, name: task.name, startUrl: task.startUrl, steps: [], checks: [], screenshots: [], status: 'error', startedAt: new Date().toISOString() };
+  const result = { id: task.id, name: task.name, startUrl: task.startUrl, steps: [], checks: [], screenshots: [], paid: [], status: 'error', startedAt: new Date().toISOString() };
   let b;
   try {
     const minutes = task.durationMinutes || pickDuration(task.steps.length + (task.expect?.length || 0));
-    b = await RentedBrowser.rent(minutes, `browser ${minutes}m · ${task.id}`);
+    b = await RentedBrowser.rent(account, minutes, `browser ${minutes}m · ${task.id}`);
     result.sessionId = b.sessionId;
+    if (b.paid) result.paid.push({ what: `browser ${minutes} min`, ...b.paid });
     await b.cmd({ action: 'open', url: task.startUrl });
     result.steps.push({ action: 'open', url: task.startUrl, ok: true });
     let i = 0;
@@ -47,7 +48,7 @@ export async function runTask(task, outDir) {
       }
     }
     const final = await shot(b, dir, 'final.png'); if (final) result.screenshots.push(final);
-    const text = await pageText(b);
+    const text = await getKind(b, 'text');
     const url = await getKind(b, 'url');
     const title = await getKind(b, 'title');
     result.final = { url, title };
@@ -56,12 +57,11 @@ export async function runTask(task, outDir) {
       if (ex.textContains) c = { type: 'textContains', value: ex.textContains, pass: text.toLowerCase().includes(ex.textContains.toLowerCase()) };
       else if (ex.urlContains) c = { type: 'urlContains', value: ex.urlContains, pass: String(url).includes(ex.urlContains) };
       else if (ex.titleContains) c = { type: 'titleContains', value: ex.titleContains, pass: String(title).toLowerCase().includes(ex.titleContains.toLowerCase()) };
-      else if (ex.judge && network().slug === 'celo-sepolia') {
-        // Cencori inference is sold on Celo mainnet only; on the sandbox fall back to the task's literal check.
-        const lit = ex.fallbackTextContains;
-        c = { type: 'judge (sandbox fallback)', value: ex.judge, pass: lit ? text.toLowerCase().includes(lit.toLowerCase()) : false, reason: lit ? `sandbox: checked literal text "${lit}" instead of paid inference` : 'sandbox: no paid inference on testnet' };
+      else if (ex.judge) {
+        const j = await judge(account, { expectation: ex.judge, pageText: text, url, title });
+        c = { type: 'judge', value: ex.judge, pass: j.pass, reason: j.reason, model: j.model };
+        if (j.paid) result.paid.push({ what: 'judge', ...j.paid });
       }
-      else if (ex.judge) { const j = await judge({ expectation: ex.judge, pageText: text, url, title }); c = { type: 'judge', value: ex.judge, pass: j.pass, reason: j.reason }; }
       else c = { type: 'unknown', value: JSON.stringify(ex), pass: false };
       result.checks.push(c);
     }

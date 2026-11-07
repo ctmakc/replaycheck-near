@@ -1,49 +1,45 @@
-// ReplayCheck as a paid service. This process is the upstream behind `buy gate paywall.yml`:
-// the gate answers 402, verifies and settles the caller's USDC payment to the agent wallet,
-// then forwards the request here. Each run in turn buys its browser sessions and inference
-// from the buy gateway, so one customer payment fans out into paid calls to other services.
+// ReplayCheck agent as a paid service on NEAR.
+//
+//   POST /v1/replay  { job_id, tasks }   the customer has already posted + funded the job on the
+//                                        market contract. The agent checks the job is for it, is
+//                                        open, and that sha256(canonical({tasks})) equals the
+//                                        job's spec_hash; accepts it on-chain; rents browser
+//                                        minutes (and judgement calls) from the worker agent over
+//                                        near402; writes the report; delivers its hash on-chain,
+//                                        which releases the escrow to the agent.
+//   GET  /v1/agent                        listing: account, price, contract, worker, stats
+//   GET  /v1/health
+//   GET  /reports/…                       delivered reports (HTML, JSON, screenshots)
+//   POST /demo/run { tasks }              free demo: the server itself plays the customer with a
+//                                        separate funded testnet account, so a visitor sees the
+//                                        full paid loop without a wallet. Rate-limited.
 import { createServer } from 'node:http';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { runTask } from './runner.js';
-import { writeReport } from './report.js';
-import { receipts } from './pay.js';
-import { agentAccount } from './wallet.js';
-import { network, ATTRIBUTION_CODE } from './config.js';
+import { writeReportJson, writeHtml } from './report.js';
+import { receipts } from './near402.js';
+import { agentAccount, accountFromEnv, getJob, getAgent, getStats, getRecentJobs, acceptJob, deliver, postJob, specHash, balance } from './near.js';
+import { network, CONTRACT_ID, WORKER_URL, fmtNear, txUrl } from './config.js';
 
-const PORT = Number(process.env.PORT || 8742);
-if (!process.env.REPLAYCHECK_AGENT_ID && network().slug === 'celo' && existsSync('reports/mainnet-state.json')) {
-  try { const st = JSON.parse(readFileSync('reports/mainnet-state.json', 'utf8')); if (st.agentId) process.env.REPLAYCHECK_AGENT_ID = String(st.agentId); } catch {}
-}
+const PORT = Number(process.env.PORT || 8744);
 const PUBLIC_BASE = process.env.REPLAYCHECK_PUBLIC_BASE || `http://127.0.0.1:${PORT}`;
 const MAX_TASKS = 3, MAX_STEPS = 12;
-// Free demo runs (Celo Sepolia only): one at a time, at most DEMO_PER_HOUR per hour.
-const DEMO_PER_HOUR = Number(process.env.REPLAYCHECK_DEMO_PER_HOUR || 30);
+const DEMO_PER_HOUR = Number(process.env.REPLAYCHECK_DEMO_PER_HOUR || 20);
+const agent = agentAccount();
 let demoBusy = false; const demoTimes = [];
-const STATIC = { '/': ['public/index.html', 'text/html; charset=utf-8'], '/logo.png': ['public/logo.png', 'image/png'], '/mmix-logo.png': ['public/mmix-logo.png', 'image/png'], '/demo.mp4': ['public/demo.mp4', 'video/mp4'] };
+const STATIC = {
+  '/': ['public/index.html', 'text/html; charset=utf-8'],
+  '/logo.png': ['public/logo.png', 'image/png'],
+  '/mmix-logo.png': ['public/mmix-logo.png', 'image/png'],
+  '/demo.mp4': ['public/demo.mp4', 'video/mp4'],
+  '/tasks/demo.json': ['tasks/demo.json', 'application/json'],
+};
+const events = []; // live feed for the demo page: last 200 events
+function emit(kind, data) { events.push({ t: Date.now(), kind, ...data }); if (events.length > 200) events.shift(); }
 
-async function readBody(req) { let raw = ''; for await (const c of req) { raw += c; if (raw.length > 64 * 1024) break; } return raw; }
-
-async function replay(body, payer) {
-  const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 8);
-  const outDir = join('reports', 'runs', runId);
-  mkdirSync(outDir, { recursive: true });
-  const before = receipts.length;
-  const results = [];
-  for (const t of body.tasks) results.push(await runTask(t, outDir));
-  const runReceipts = receipts.slice(before);
-  writeReport(outDir, { runId, network: network().slug, agent: agentAccount().address, agentId: process.env.REPLAYCHECK_AGENT_ID || null, attributionCode: ATTRIBUTION_CODE, payer, results, receipts: runReceipts });
-  return {
-    runId,
-    network: network().slug,
-    report: `${PUBLIC_BASE}/${outDir}/index.html`,
-    reportBase: `${PUBLIC_BASE}/${outDir}`,
-    passed: results.filter((r) => r.status === 'pass').length,
-    total: results.length,
-    results: results.map((r) => ({ id: r.id, name: r.name, status: r.status, error: r.error || null, checks: r.checks, screenshots: r.screenshots, final: r.final })),
-    upstreamPaidCalls: runReceipts.map((r) => ({ provider: r.provider, capability: r.capability, usd: r.usd, txHash: r.txHash, explorer: r.explorer })),
-  };
-}
+function send(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(obj)); }
+async function readBody(req) { let raw = ''; for await (const c of req) { raw += c; if (raw.length > 128 * 1024) break; } return raw; }
 
 function validate(body) {
   const tasks = body?.tasks;
@@ -52,45 +48,116 @@ function validate(body) {
     if (typeof t.startUrl !== 'string' || !/^https:\/\//.test(t.startUrl)) return `tasks[${i}].startUrl must be https`;
     if (!Array.isArray(t.steps) || t.steps.length > MAX_STEPS) return `tasks[${i}].steps must be an array of at most ${MAX_STEPS}`;
     if (!Array.isArray(t.expect) || t.expect.length === 0 || t.expect.length > 4) return `tasks[${i}].expect must have 1..4 checks`;
-    t.id = String(t.id || `task-${i + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 40) || `task-${i + 1}`;
-    t.name = String(t.name || t.id).slice(0, 200);
+    if (typeof t.id !== 'string' || !/^[a-z0-9_-]{1,40}$/i.test(t.id)) return `tasks[${i}].id must match [a-z0-9_-]{1,40}`;
+    if (typeof t.name !== 'string' || t.name.length > 200) return `tasks[${i}].name must be a string of at most 200 chars`;
   }
   return null;
 }
 
+/** The paid loop for one funded job. */
+async function serveJob(jobId, tasks, { payer }) {
+  const job = await getJob(jobId);
+  if (!job) throw Object.assign(new Error(`job ${jobId} does not exist on ${CONTRACT_ID()}`), { status: 404 });
+  if (job.agent !== agent.accountId) throw Object.assign(new Error(`job ${jobId} is for ${job.agent}, this agent is ${agent.accountId}`), { status: 403 });
+  if (job.status !== 'Open') throw Object.assign(new Error(`job ${jobId} is ${job.status}, expected Open`), { status: 409 });
+  const hash = specHash(tasks);
+  if (hash !== job.spec_hash) throw Object.assign(new Error(`task spec hash ${hash} does not match the job's ${job.spec_hash}`), { status: 400 });
+
+  const runId = `job-${jobId}-` + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const outDir = join('reports', 'runs', runId);
+  mkdirSync(outDir, { recursive: true });
+  emit('job', { jobId, stage: 'verified', hash });
+
+  const accepted = await acceptJob(agent, jobId);
+  emit('job', { jobId, stage: 'accepted', tx: accepted.hash, url: txUrl(accepted.hash) });
+
+  const before = receipts.length;
+  const results = [];
+  for (const t of tasks) {
+    emit('task', { jobId, id: t.id, stage: 'start' });
+    const r = await runTask(agent, t, outDir);
+    emit('task', { jobId, id: t.id, stage: r.status, paid: r.paid });
+    results.push(r);
+  }
+  const runReceipts = receipts.slice(before);
+  const passed = results.filter((r) => r.status === 'pass').length;
+  const run = { runId, jobId, network: network().slug, contract: CONTRACT_ID(), agent: agent.accountId, customer: job.customer, specHash: hash, payer, results, receipts: runReceipts, finishedAt: new Date().toISOString() };
+  const reportHash = writeReportJson(outDir, run);
+  const reportUrl = `${PUBLIC_BASE}/${outDir}/index.html`;
+  const delivered = await deliver(agent, jobId, reportHash, passed, results.length, reportUrl);
+  emit('job', { jobId, stage: 'delivered', tx: delivered.hash, url: txUrl(delivered.hash), passed, total: results.length, reportHash, reportUrl });
+  const onchain = { jobId, customer: job.customer, deposit: job.deposit, specHash: hash, reportHash, acceptTx: accepted.hash, deliverTx: delivered.hash };
+  writeHtml(outDir, run, onchain);
+  const spent = runReceipts.reduce((a, r) => a + BigInt(r.amount), 0n);
+  return {
+    jobId, runId, network: network().slug, contract: CONTRACT_ID(),
+    report: reportUrl, reportJson: `${PUBLIC_BASE}/${outDir}/report.json`, reportHash,
+    passed, total: results.length,
+    earned: job.deposit, earnedNear: fmtNear(job.deposit, 6), spent: spent.toString(), spentNear: fmtNear(spent, 6),
+    tx: { accept: accepted.hash, deliver: delivered.hash, acceptUrl: txUrl(accepted.hash), deliverUrl: txUrl(delivered.hash) },
+    results: results.map((r) => ({ id: r.id, name: r.name, status: r.status, error: r.error || null, checks: r.checks, screenshots: r.screenshots.map((s) => `${PUBLIC_BASE}/${outDir}/${r.id}/${s}`), final: r.final, paid: r.paid })),
+    upstreamPaidCalls: runReceipts.map((r) => ({ label: r.label, payTo: r.payTo, near: r.near, memo: r.memo, txHash: r.txHash, explorer: r.explorer })),
+  };
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (req.method === 'GET' && url.pathname === '/v1/health') {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, agent: agentAccount().address, network: network().slug, agentId: process.env.REPLAYCHECK_AGENT_ID || null, attributionCode: ATTRIBUTION_CODE }));
-  }
-  if (req.method === 'GET' && url.pathname.startsWith('/reports/')) {
-    const p = normalize(url.pathname).replace(/^\/+/, '');
-    if (!p.startsWith('reports/') || !existsSync(p)) { res.writeHead(404); return res.end(); }
-    const type = p.endsWith('.png') ? 'image/png' : p.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8';
-    res.writeHead(200, { 'content-type': type }); return res.end(readFileSync(p));
-  }
-  if (req.method === 'GET' && STATIC[url.pathname]) {
-    const [f, type] = STATIC[url.pathname];
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' }); return res.end(readFileSync(f));
-  }
-  if (req.method === 'POST' && (url.pathname === '/v1/replay' || url.pathname === '/demo/run')) {
-    const demo = url.pathname === '/demo/run';
-    const send = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
-    if (demo) {
-      if (network().slug !== 'celo-sepolia') return send(403, { error: 'free demo runs only on the Celo Sepolia instance; use POST /v1/replay with x402' });
-      const now = Date.now(); while (demoTimes.length && now - demoTimes[0] > 3600e3) demoTimes.shift();
-      if (demoTimes.length >= DEMO_PER_HOUR) return send(429, { error: 'demo limit reached for this hour, try again later or pay per run over x402' });
-      if (demoBusy) return send(429, { error: 'another demo run is in progress, try again in a minute' });
+  try {
+    if (req.method === 'GET' && url.pathname === '/v1/health') return send(res, 200, { ok: true, agent: agent.accountId, network: network().slug, contract: CONTRACT_ID() });
+    if (req.method === 'GET' && url.pathname === '/v1/agent') {
+      const [listing, stats, bal] = await Promise.all([getAgent(agent.accountId), getStats(), balance(agent.accountId).catch(() => null)]);
+      const worker = await fetch(`${WORKER_URL()}/v1/health`, { signal: AbortSignal.timeout(3000) }).then((r) => r.json()).catch(() => null);
+      return send(res, 200, { agent: agent.accountId, network: network().slug, contract: CONTRACT_ID(), listing, stats, balance: bal?.toString() ?? null, balanceNear: bal != null ? fmtNear(bal, 4) : null, worker, explorer: network().explorer });
     }
-    let body; try { body = JSON.parse(await readBody(req)); } catch { return send(400, { error: 'invalid json' }); }
-    const err = validate(body);
-    if (err) return send(400, { error: err });
-    if (demo) { if (body.tasks.length > 1) return send(400, { error: 'demo runs take one task' }); demoBusy = true; demoTimes.push(Date.now()); }
-    try { return send(200, await replay(body, demo ? 'demo' : (req.headers['x-payer'] || null))); }
-    catch (e) { return send(500, { error: e.message }); }
-    finally { if (demo) demoBusy = false; }
+    if (req.method === 'GET' && url.pathname === '/v1/jobs') return send(res, 200, await getRecentJobs(Number(url.searchParams.get('limit') || 20)));
+    if (req.method === 'GET' && url.pathname === '/v1/events') {
+      const since = Number(url.searchParams.get('since') || 0);
+      return send(res, 200, events.filter((e) => e.t > since));
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/reports/')) {
+      const p = normalize(url.pathname).replace(/^\/+/, '');
+      if (!p.startsWith('reports/') || !existsSync(p) || statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
+      const type = p.endsWith('.png') ? 'image/png' : p.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8';
+      res.writeHead(200, { 'content-type': type, 'access-control-allow-origin': '*' }); return res.end(readFileSync(p));
+    }
+    if (req.method === 'GET' && STATIC[url.pathname]) {
+      const [f, type] = STATIC[url.pathname];
+      if (!existsSync(f)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' }); return res.end(readFileSync(f));
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/replay') {
+      let body; try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'invalid json' }); }
+      const err = validate(body); if (err) return send(res, 400, { error: err });
+      if (!Number.isInteger(body.job_id) || body.job_id < 0) return send(res, 400, { error: 'job_id (integer) is required: post the job on the market contract first' });
+      try { return send(res, 200, await serveJob(body.job_id, body.tasks, { payer: null })); }
+      catch (e) { emit('error', { jobId: body.job_id, message: e.message }); return send(res, e.status || 500, { error: e.message }); }
+    }
+    if (req.method === 'POST' && url.pathname === '/demo/run') {
+      if (network().slug !== 'testnet') return send(res, 403, { error: 'free demo runs only on testnet; use POST /v1/replay with a funded job' });
+      let customer; try { customer = accountFromEnv('REPLAYCHECK_DEMO_CUSTOMER_ID', 'REPLAYCHECK_DEMO_CUSTOMER_KEY'); } catch { return send(res, 503, { error: 'demo customer account is not configured on this instance' }); }
+      const now = Date.now(); while (demoTimes.length && now - demoTimes[0] > 3600e3) demoTimes.shift();
+      if (demoTimes.length >= DEMO_PER_HOUR) return send(res, 429, { error: 'demo limit reached for this hour; post your own job from a testnet account instead' });
+      if (demoBusy) return send(res, 429, { error: 'another demo run is in progress, try again in a minute' });
+      let body; try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'invalid json' }); }
+      const err = validate(body); if (err) return send(res, 400, { error: err });
+      if (body.tasks.length > 2) return send(res, 400, { error: 'demo runs take up to two tasks' });
+      demoBusy = true; demoTimes.push(Date.now());
+      try {
+        const listing = await getAgent(agent.accountId);
+        if (!listing) return send(res, 503, { error: 'agent is not registered on the market contract' });
+        const hash = specHash(body.tasks);
+        emit('demo', { stage: 'posting', customer: customer.accountId, hash });
+        const posted = await postJob(customer, agent.accountId, hash, BigInt(listing.price));
+        emit('job', { jobId: posted.jobId, stage: 'posted', tx: posted.hash, url: txUrl(posted.hash), customer: customer.accountId, deposit: listing.price });
+        const out = await serveJob(posted.jobId, body.tasks, { payer: customer.accountId });
+        return send(res, 200, { ...out, customer: customer.accountId, tx: { ...out.tx, post: posted.hash, postUrl: txUrl(posted.hash) } });
+      } catch (e) { emit('error', { message: e.message }); return send(res, e.status || 500, { error: e.message }); }
+      finally { demoBusy = false; }
+    }
+    send(res, 404, { error: 'not found' });
+  } catch (e) {
+    console.error('[replaycheck]', e);
+    send(res, 500, { error: String(e.message).slice(0, 300) });
   }
-  res.writeHead(404, { 'content-type': 'application/json' }); res.end('{"error":"not found"}');
 });
-server.listen(PORT, '127.0.0.1', () => console.error(`[replaycheck] upstream on 127.0.0.1:${PORT} (${network().slug})`));
+server.listen(PORT, process.env.BIND || '127.0.0.1', () => console.error(`[replaycheck] agent ${agent.accountId} on NEAR ${network().slug}, market ${CONTRACT_ID()}, worker ${WORKER_URL()} — 127.0.0.1:${PORT}`));
