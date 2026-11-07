@@ -13,9 +13,9 @@
 //   buyer.<owner>      demo customer used by the live page and `replaycheck order`
 import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { Account, JsonRpcProvider, KeyPair } from 'near-api-js';
+import { Account, JsonRpcProvider, FailoverRpcProvider, KeyPair } from 'near-api-js';
 
-const RPC = process.env.NEAR_RPC || 'https://rpc.testnet.near.org';
+const RPC = process.env.NEAR_RPC || 'https://test.rpc.fastnear.com,https://near-testnet.drpc.org';
 const FAUCET = 'https://helper.testnet.near.org/account';
 const ENV = process.env.REPLAYCHECK_ENV_FILE || '.env.near';
 const WASM = 'contracts/replay-market/res/replay_market.wasm';
@@ -24,7 +24,7 @@ const AGENT_PRICE = process.env.AGENT_PRICE_YOCTO || (NEAR / 20n).toString(); //
 const SERVICE_URL = process.env.REPLAYCHECK_SERVICE_URL || 'http://127.0.0.1:8746/v1';
 const redeploy = process.argv.includes('--redeploy');
 
-const provider = new JsonRpcProvider({ url: RPC });
+const provider = new FailoverRpcProvider(RPC.split(',').map((url) => new JsonRpcProvider({ url: url.trim() })));
 const env = existsSync(ENV) ? Object.fromEntries(readFileSync(ENV, 'utf8').split('\n').filter((l) => l && !l.startsWith('#')).map((l) => l.split(/=(.*)/s).slice(0, 2))) : {};
 const save = () => { writeFileSync(ENV, Object.entries(env).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'); chmodSync(ENV, 0o600); };
 const log = (...a) => console.error('[near-setup]', ...a);

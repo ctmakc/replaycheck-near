@@ -150,7 +150,27 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [f, type] = STATIC[url.pathname];
       if (!existsSync(f)) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' }); return res.end(readFileSync(f));
+      const h = { 'content-type': type, 'cache-control': 'no-cache' };
+      if (type.startsWith('text/html')) h['permissions-policy'] = 'microphone=(self), camera=(self)';
+      res.writeHead(200, h); return res.end(readFileSync(f));
+    }
+    // MMIX Review Kit (studio bug button on every page we ship): static files + binary-safe proxy to review.mmix.biz
+    if (req.method === 'GET' && url.pathname.startsWith('/mmix-kit/')) {
+      const p = normalize(url.pathname).replace(/^\/+/, '');
+      const f = join('public', p);
+      if (!p.startsWith('mmix-kit/') || !existsSync(f) || statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'content-type': p.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }); return res.end(readFileSync(f));
+    }
+    if (url.pathname.startsWith('/api/review')) {
+      const chunks = []; for await (const c of req) { chunks.push(c); if (chunks.reduce((a, b) => a + b.length, 0) > 30 * 1024 * 1024) break; }
+      const body = Buffer.concat(chunks);
+      const headers = {}; for (const k of ['content-type', 'accept', 'x-forwarded-for', 'user-agent', 'referer']) if (req.headers[k]) headers[k] = req.headers[k];
+      try {
+        const up = await fetch('https://review.mmix.biz' + url.pathname + url.search, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body, redirect: 'manual', signal: AbortSignal.timeout(60e3) });
+        const out = Buffer.from(await up.arrayBuffer());
+        const h = {}; for (const k of ['content-type', 'content-disposition', 'cache-control', 'content-security-policy', 'location']) { const v = up.headers.get(k); if (v) h[k] = v; }
+        res.writeHead(up.status, h); return res.end(out);
+      } catch (e) { return send(res, 502, { error: 'review proxy: ' + e.message }); }
     }
     if (req.method === 'POST' && url.pathname === '/v1/replay') {
       let body; try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'invalid json' }); }

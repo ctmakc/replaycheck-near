@@ -56,7 +56,7 @@ On testnet both agents are operated by us; the point is the mechanism. The worke
 
 ## Try it (judge path, free, ~10 minutes)
 
-Prerequisites: Node 22+, internet access to `rpc.testnet.near.org`. Optional: a Rust toolchain (`rustup`, target `wasm32-unknown-unknown`) to rebuild the contract; the built wasm is committed. Optional: [Ollama](https://ollama.com) with `qwen2.5:7b-instruct` for plain-language checks; without it the `judge` check in `tasks/demo.json` fails and the run reports 1/2, every other step still works.
+Prerequisites: Node 22+, internet access to a testnet RPC (default: FastNEAR `test.rpc.fastnear.com` with dRPC as failover; `rpc.testnet.near.org` is deprecated and rate-limits). Optional: a Rust toolchain (`rustup`, target `wasm32-unknown-unknown`) to rebuild the contract; the built wasm is committed. Optional: [Ollama](https://ollama.com) with `qwen2.5:7b-instruct` for plain-language checks; without it the `judge` check in `tasks/demo.json` fails and the run reports 1/2, every other step still works.
 
 ```sh
 git clone https://github.com/ctmakc/replaycheck-near && cd replaycheck-near

@@ -4,16 +4,20 @@
 export const NETWORKS = {
   testnet: {
     slug: 'testnet',
-    rpc: process.env.NEAR_RPC || 'https://rpc.testnet.near.org',
+    // rpc.testnet.near.org is deprecated (answers -429 "STOP USING IT"); FastNEAR first, dRPC as failover.
+    rpc: process.env.NEAR_RPC || 'https://test.rpc.fastnear.com,https://near-testnet.drpc.org',
     explorer: 'https://testnet.nearblocks.io',
     faucet: 'https://helper.testnet.near.org/account',
   },
   mainnet: {
     slug: 'mainnet',
-    rpc: process.env.NEAR_RPC || 'https://rpc.mainnet.near.org',
+    rpc: process.env.NEAR_RPC || 'https://rpc.fastnear.com,https://near.drpc.org',
     explorer: 'https://nearblocks.io',
   },
 };
+
+/** NEAR_RPC may list several endpoints separated by commas; the first answers, the rest are failover. */
+export function rpcUrls(n = network()) { return n.rpc.split(',').map((u) => u.trim()).filter(Boolean); }
 
 export function network() {
   const slug = process.env.NEAR_NETWORK || 'testnet';

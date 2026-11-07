@@ -1,14 +1,17 @@
 // Thin NEAR layer: accounts from env keys, views, calls, and the two things the market
 // contract is for — escrow jobs and `pay(to, memo)` receipts.
 import { createHash } from 'node:crypto';
-import { Account, JsonRpcProvider, KeyPair } from 'near-api-js';
-import { network, CONTRACT_ID } from './config.js';
+import { Account, JsonRpcProvider, FailoverRpcProvider, KeyPair } from 'near-api-js';
+import { network, rpcUrls, CONTRACT_ID } from './config.js';
 
 const TGAS = 10n ** 12n;
 
 let _provider;
 export function provider() {
-  if (!_provider) _provider = new JsonRpcProvider({ url: network().rpc });
+  if (!_provider) {
+    const urls = rpcUrls();
+    _provider = urls.length > 1 ? new FailoverRpcProvider(urls.map((url) => new JsonRpcProvider({ url }))) : new JsonRpcProvider({ url: urls[0] });
+  }
   return _provider;
 }
 
