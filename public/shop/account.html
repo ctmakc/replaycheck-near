@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Your account · Northwind Supply</title><link rel="stylesheet" href="/shop/style.css"></head>
+<body><header><b>NORTHWIND SUPPLY</b><nav><a href="/shop/account">Account</a><a href="/">ReplayCheck</a></nav></header>
+<main><div id="flash" class="success">You are signed in to your account.</div><h1>Recent orders</h1><p class="lead" id="who"></p>
+<div class="order"><span>#10412 · Cordless drill, 18 V</span><span>Shipped</span></div>
+<div class="order"><span>#10398 · Work gloves ×3</span><span>Delivered</span></div>
+<div class="order"><span>#10377 · Tape measure 8 m</span><span>Delivered</span></div>
+<a class="logout" href="/shop/login" id="logout">Log out</a></main>
+<script>
+const u = sessionStorage.getItem('nw_user'); if (!u) location.replace('/shop/login'); else document.getElementById('who').textContent = 'Signed in as ' + u + '.';
+document.getElementById('logout').addEventListener('click', () => sessionStorage.removeItem('nw_user'));
+</script></body></html>

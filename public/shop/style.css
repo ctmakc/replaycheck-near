@@ -1,0 +1,11 @@
+/* Demo target for ReplayCheck runs: a small storefront account area. Plain on purpose. */
+:root{--bg:#F6F6F4;--ink:#1D1F23;--mut:#6B7078;--line:#D8DAD6;--brand:#2F6F4F;--err:#B42318;--ok:#1E7A46}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--line);background:#fff}
+header b{letter-spacing:.02em}header nav a{color:var(--mut);text-decoration:none;margin-left:18px;font-size:14px}
+main{max-width:420px;margin:56px auto;padding:0 16px}h1{font-size:26px;margin:0 0 6px}p.lead{color:var(--mut);margin:0 0 24px}
+label{display:block;font-size:13px;color:var(--mut);margin:14px 0 6px}input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:6px;background:var(--brand);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+#flash{margin:0 0 16px;padding:10px 12px;border-radius:6px;font-size:14px;display:none}#flash.error{display:block;background:#FDECEA;color:var(--err);border:1px solid #F5C6C2}#flash.success{display:block;background:#E6F4EC;color:var(--ok);border:1px solid #BFE3CC}
+.order{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}.order span:last-child{color:var(--mut)}
+a.logout{display:inline-block;margin-top:24px;color:var(--brand)}

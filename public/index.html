@@ -2,274 +2,422 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ReplayCheck</title>
-<meta name="description" content="ReplayCheck replays your users' key flows in a rented browser after every release and pays per call in USDC on Celo over x402.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReplayCheck on NEAR — a QA agent that gets paid and pays its suppliers</title>
+<meta name="description" content="ReplayCheck replays your users' key flows in a real browser. Customers escrow the fee on a NEAR contract, the agent rents browser minutes from another agent over HTTP 402, and the report hash on-chain releases the payment.">
+<meta property="og:title" content="ReplayCheck on NEAR">
+<meta property="og:description" content="A QA agent that sells browser-replay runs for NEAR and pays a browser worker per minute. Every state change is a transaction.">
+<meta property="og:image" content="https://replaycheck-near.mmix.biz/og.png">
 <link rel="icon" href="/logo.png">
-<meta property="og:title" content="ReplayCheck">
-<meta property="og:description" content="Replays your users' key flows after every release. Buys browsers and inference per call on Celo.">
-<meta property="og:image" content="/logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;700&family=Red+Hat+Display:wght@300;500;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=Barlow:wght@400;500&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet">
 <style>
 :root{
-  --night:#121410; --night-2:#1B1E17; --rule:#2C3025; --text:#E6E2D3; --mute:#9A9C8C;
-  --paper:#ECE7D9; --ink:#22241C; --ink-mute:#5E5F52;
-  --sodium:#FFC93C; --pass:#6FD08C; --fail:#FF6B57; --pass-ink:#1F6B39; --fail-ink:#A3301F;
-  --disp:"Red Hat Display",ui-sans-serif,sans-serif; --mono:"Azeret Mono",ui-monospace,monospace;
-  --ease-out:cubic-bezier(.16,1,.3,1); --ease-in:cubic-bezier(.7,0,.84,0);
-  --r:3px;
+  --concourse:#E3E5E2; --panel:#F4F5F3; --board:#1B1D21; --flap:#2A2D33; --flap-edge:#111317; --flap-ink:#F2F3EE;
+  --ink:#15171A; --muted:#5F646B; --rule:#C9CCC7; --rule-dark:#3A3E45;
+  --stamp:#002FA7; --stamp-ink:#F4F6FF; --delivered:#1D7A46; --refund:#C81E1E; --wait:#B98A14;
+  --display:"Barlow Semi Condensed",ui-sans-serif,system-ui,sans-serif; --body:"Barlow",ui-sans-serif,system-ui,sans-serif; --mono:"Fragment Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --t-xs:clamp(.78rem,.74rem + .2vw,.86rem); --t-base:clamp(1rem,.96rem + .2vw,1.1rem); --t-lg:clamp(1.25rem,1.1rem + .8vw,1.65rem);
+  --t-xl:clamp(2rem,1.5rem + 2.5vw,3.2rem); --t-hero:clamp(2.5rem,1.3rem + 3.6vw,4.5rem);
+  --gutter:clamp(1rem,.8rem + 1.2vw,2rem); --row:clamp(1.1rem,1rem + .6vw,1.6rem);
+  --ease-mech:cubic-bezier(.2,.9,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
 }
-*{box-sizing:border-box}
-html{background:var(--night);color:var(--text)}
-body{margin:0;font:400 16px/1.55 var(--disp);background:var(--night);min-height:100vh}
-a{color:var(--sodium);text-underline-offset:3px}
-a:hover{color:var(--paper)}
-code,pre,.mono{font-family:var(--mono)}
-.wrap{max-width:1240px;margin:0 auto;padding:0 24px}
-header.top{display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--rule)}
-.brand{display:flex;align-items:center;gap:10px;font:800 18px/1 var(--disp);letter-spacing:-.01em;color:var(--text);text-decoration:none}
-.brand img{width:28px;height:28px}
-.top nav{display:flex;gap:20px;font:500 13px/1 var(--mono)}
-.top nav a{color:var(--mute);text-decoration:none}
-.top nav a:hover{color:var(--sodium)}
-.grid{display:grid;grid-template-columns:5fr 7fr;gap:56px;padding:48px 0 96px;align-items:start}
-h1{font:800 clamp(36px,6.4vw,92px)/.98 var(--disp);letter-spacing:-.04em;margin:0;padding:64px 0 0;max-width:15ch}
-@media (min-width:901px){h1{max-width:none}}
-h1 .line{display:block;overflow:hidden;padding-bottom:.06em}
-h1 .line>span{display:block}
-h1 em{font-style:normal;font-weight:300;color:var(--sodium)}
-.lede{font:300 19px/1.55 var(--disp);color:var(--text);max-width:34em;margin:0 0 28px}
-.ledger{border-top:1px solid var(--rule);margin:0;padding:0;list-style:none}
-.ledger li{display:grid;grid-template-columns:7.5em 1fr auto;gap:12px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:15px;align-items:baseline}
-.ledger .k{font:500 12px/1.4 var(--mono);color:var(--mute);text-transform:uppercase;letter-spacing:.06em}
-.ledger .v{font:500 13px/1.4 var(--mono);color:var(--sodium);white-space:nowrap}
-.ids{margin-top:28px;font:400 12.5px/1.8 var(--mono);color:var(--mute);overflow-wrap:anywhere}
-.ids b{color:var(--text);font-weight:500}
-/* console */
-.console{background:var(--night-2);border:1px solid var(--rule);border-radius:var(--r);padding:22px;position:relative}
-.console h2{font:800 20px/1.2 var(--disp);letter-spacing:-.01em;margin:0 0 4px}
-.console .sub{color:var(--mute);font-size:14px;margin:0 0 18px}
-.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.presets button{font:500 12.5px/1 var(--mono);background:transparent;color:var(--text);border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;cursor:pointer;transition:border-color .18s,color .18s}
-.presets button[aria-pressed=true]{border-color:var(--sodium);color:var(--sodium)}
-.presets button:hover{border-color:var(--mute)}
-label{display:block;font:500 11.5px/1 var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--mute);margin:14px 0 6px}
-input,textarea{width:100%;background:var(--night);color:var(--text);border:1px solid var(--rule);border-radius:var(--r);padding:11px 12px;font:400 13px/1.5 var(--mono)}
-input:focus,textarea:focus{outline:2px solid var(--sodium);outline-offset:1px;border-color:transparent}
-textarea{min-height:132px;resize:vertical}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.go{margin-top:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.go button{font:800 15px/1 var(--disp);background:var(--sodium);color:var(--ink);border:0;border-radius:var(--r);padding:15px 22px;cursor:pointer;transition:transform .16s var(--ease-out),background .16s}
-.go button:hover{transform:translateY(-1px);background:#FFD566}
-.go button:active{transform:translateY(1px)}
-.go button[disabled]{opacity:.55;cursor:progress}
-.go .note{font:400 12.5px/1.5 var(--mono);color:var(--mute)}
-/* receipt */
-.slot{height:10px;margin:26px -6px 0;background:#090A08;border-radius:5px;box-shadow:inset 0 2px 4px #000}
-.tape{overflow:hidden;margin:0 10px}
-.receipt{background:var(--paper);color:var(--ink);font:400 12.5px/1.6 var(--mono);padding:18px 18px 26px;
-  -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 8px) no-repeat,radial-gradient(circle 6px at 8px 100%,transparent 6px,#000 6.5px) bottom/16px 8px repeat-x;
-          mask:linear-gradient(#000 0 0) top/100% calc(100% - 8px) no-repeat,radial-gradient(circle 6px at 8px 100%,transparent 6px,#000 6.5px) bottom/16px 8px repeat-x}
-.receipt.feed{animation:feed .7s var(--ease-out) both}
-@keyframes feed{from{transform:translateY(-100%)}to{transform:none}}
-.receipt .ln{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
-.receipt .ln>span:last-child{text-align:right}
-.receipt .hd{font-weight:700;text-align:center;letter-spacing:.12em;display:block}
-.receipt .cut{border-top:1px dashed var(--ink-mute);margin:10px 0}
-.receipt .mut{color:var(--ink-mute)}
-.receipt .p{color:var(--pass-ink);font-weight:700}.receipt .f{color:var(--fail-ink);font-weight:700}
-.receipt a{color:var(--ink)}
-.receipt .print{opacity:0;transform:translateY(-3px)}
-.receipt .print.on{opacity:1;transform:none;transition:opacity .22s var(--ease-out),transform .22s var(--ease-out)}
-.receipt .shots{display:flex;gap:8px;margin:8px 0}
-.receipt .shots img{width:50%;border:1px solid #CFC9B7;filter:grayscale(.3) contrast(1.05)}
-.receipt.idle{color:var(--ink-mute);text-align:center}
-.spinner{display:inline-block;animation:blink 1s steps(2) infinite}@keyframes blink{50%{opacity:0}}
-/* x402 */
-.paywith{border-top:1px solid var(--rule);padding:56px 0 72px;display:grid;grid-template-columns:5fr 7fr;gap:56px}
-.paywith h2{font:800 30px/1.05 var(--disp);letter-spacing:-.025em;margin:0 0 14px}
-.paywith p{color:var(--mute);margin:0 0 12px;max-width:34em}
-pre{background:var(--night-2);border:1px solid var(--rule);border-radius:var(--r);padding:16px;overflow:auto;font-size:12.5px;line-height:1.6;color:var(--text);margin:0}
-pre .c{color:var(--mute)}
-footer{border-top:1px solid var(--rule);padding:22px 0 30px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;font:400 12.5px/1.5 var(--mono);color:var(--mute)}
-.credit{display:inline-flex;align-items:center;gap:10px;color:var(--mute);text-decoration:none}
-.credit img{height:36px;width:auto;background:rgba(255,255,255,.9);border-radius:4px;padding:3px 6px}
-.reveal{opacity:0;transform:translateY(14px)}
-.reveal.in{opacity:1;transform:none;transition:opacity .6s var(--ease-out),transform .6s var(--ease-out)}
-@media (max-width:900px){
-  .grid,.paywith{grid-template-columns:1fr;gap:36px}
-  .grid{padding:32px 0 64px}
-  h1{padding-top:40px}
-  .lede{font-size:17px}
-  .top nav{gap:14px}
-}
-@media (max-width:520px){
-  .wrap{padding:0 16px}
-  .row2{grid-template-columns:1fr}
-  .ledger li{grid-template-columns:1fr auto}
-  .ledger .k{grid-column:1/-1}
-  .top nav a.hide-s{display:none}
-  .console{padding:16px}
-  h1 .line,h1 .line>span{display:inline}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation:none!important;transition:none!important}
-  .reveal,.receipt .print,h1 .line>span{opacity:1!important;transform:none!important}
-}
+*,*::before,*::after{box-sizing:border-box;margin:0}
+html{overflow-x:clip;scrollbar-gutter:stable;scrollbar-color:var(--rule) var(--concourse)}
+body{background:var(--concourse);color:var(--ink);font-family:var(--body);font-size:var(--t-base);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:var(--stamp);text-decoration:none;background:linear-gradient(var(--stamp),var(--stamp)) no-repeat 0 100%/0 1px;transition:background-size .12s ease-out}
+a:hover,a:focus-visible{background-size:100% 1px}
+:focus-visible{outline:2px solid var(--stamp);outline-offset:3px}
+img,svg{display:block;max-width:100%}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.92em}
+h1,h2,h3{font-family:var(--display);font-weight:600;line-height:.98;letter-spacing:-.015em;text-wrap:balance}
+.wrap{max-width:1280px;margin-inline:auto;padding-inline:var(--gutter)}
+.eyebrow{font-family:var(--mono);font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.eyebrow b{color:var(--stamp);font-weight:400}
+
+/* ── top bar ───────────────────────────────────────────── */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--rule)}
+.bar .brand{display:flex;align-items:center;gap:.6rem;white-space:nowrap;font-family:var(--display);font-weight:600;font-size:1.15rem;letter-spacing:-.01em;color:var(--ink);background:none}
+.bar .brand img{width:26px;height:26px}
+.bar nav{display:flex;gap:1.4rem;font-size:.95rem}
+.bar nav a{color:var(--ink)}
+.live{display:inline-flex;align-items:center;gap:.45rem;font-family:var(--mono);font-size:var(--t-xs);color:var(--muted);white-space:nowrap}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--delivered);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── hero: 4/8 split ───────────────────────────────────── */
+.hero{display:grid;grid-template-columns:5fr 7fr;gap:var(--gutter);align-items:start;}
+.hero>div,.split>*,.grid>*{min-width:0}
+.hero{padding-block:clamp(2.5rem,2rem + 3vw,5rem) clamp(2rem,1.5rem + 2vw,3.5rem)}
+.hero h1{font-size:var(--t-hero);margin:.6rem 0 1rem;max-width:12ch}
+.hero .lede{font-size:var(--t-lg);line-height:1.35;color:var(--ink);max-width:30ch}
+.hero .lede b{font-weight:500}
+.hero p.note{margin-top:1rem;color:var(--muted);max-width:40ch}
+.cta{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.6rem;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:.6rem;padding:.85rem 1.2rem;border:1px solid var(--ink);background:var(--ink);color:var(--panel);font-family:var(--display);font-weight:600;font-size:1.05rem;letter-spacing:.01em;cursor:pointer;transition:transform .12s var(--ease-mech),background .12s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--stamp);border-color:var(--stamp);color:var(--stamp-ink)}
+.btn[disabled]{opacity:.55;cursor:wait;transform:none}
+.btn .mono{font-size:.8em;opacity:.8}
+.btn.ghost{background:transparent;color:var(--ink)}
+.mask{display:block;overflow:hidden}
+.mask>span{display:block;transform:translateY(110%);transition:transform .9s var(--ease-out)}
+.ready .mask>span{transform:none}
+
+/* ── the board ─────────────────────────────────────────── */
+.board{background:var(--board);color:var(--flap-ink);padding:1rem 1rem 1.1rem;border-radius:4px;box-shadow:inset 0 1px 0 #30343b,inset 0 -1px 0 #0b0c0f;transform-origin:top;opacity:0;transform:translateY(10px);transition:opacity .5s var(--ease-out),transform .6s var(--ease-out)}
+.ready .board{opacity:1;transform:none}
+.board .head{display:grid;grid-template-columns:3.4rem 1fr 1fr 8.4rem 4.6rem;gap:.6rem;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:#8d929b;padding:0 .3rem .6rem;border-bottom:1px solid var(--rule-dark)}
+.board .row{display:grid;grid-template-columns:3.4rem 1fr 1fr 8.4rem 4.6rem;gap:.6rem;align-items:center;}
+.board .row>span{min-width:0;overflow:hidden}
+.board .row{padding:.55rem .3rem;border-bottom:1px solid var(--rule-dark);opacity:0;transform:translateY(-6px)}
+.board .row.in{opacity:1;transform:none;transition:opacity .25s var(--ease-mech),transform .25s var(--ease-mech)}
+.board .row.sub{grid-template-columns:minmax(3.4rem,auto) 1fr;padding-top:0;border-bottom:1px solid var(--rule-dark);font-family:var(--mono);font-size:.7rem;color:#8d929b}
+.board .row.sub a{color:#b9c6ff;background-image:linear-gradient(#b9c6ff,#b9c6ff)}
+.board .row.sub span{word-break:break-all}
+.board .empty{padding:1.2rem .3rem;color:#8d929b;font-family:var(--mono);font-size:.8rem}
+.flaps{display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden}
+.flap{position:relative;width:.86rem;height:1.3rem;font-family:var(--mono);font-size:.92rem;line-height:1.3rem;text-align:center;perspective:140px;flex:none;color:var(--flap-ink)}
+.flap .h{position:absolute;left:0;right:0;height:50%;overflow:hidden;background:var(--flap);backface-visibility:hidden}
+.flap .h::after{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--flap-edge);opacity:.6}
+.flap .t{top:0;border-radius:2px 2px 0 0;transform-origin:bottom}
+.flap .t::after{top:auto;bottom:0}
+.flap .b{bottom:0;border-radius:0 0 2px 2px;transform-origin:top}
+.flap .b span{display:block;transform:translateY(-50%)}
+.flap .t span{display:block}
+.flaps.status .flap{width:.8rem}
+.st-POSTED .flap .h,.st-POSTING .flap .h{background:#2e3a5e}
+.st-ACCEPTED .flap .h,.st-RENTING .flap .h,.st-JUDGING .flap .h{background:#5a4a16}
+.st-DELIVERED .flap .h{background:#1f4a32}
+.st-REFUNDED .flap .h,.st-ERROR .flap .h{background:#5a2222}
+.amt{font-family:var(--mono);font-size:.82rem;text-align:right;color:#dfe3dc}
+.amt.paid{color:#8fd6a8}
+.stamp{display:inline-block;white-space:nowrap;font-family:var(--display);font-weight:600;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--stamp-ink);background:var(--stamp);padding:.1rem .4rem;border-radius:2px;transform:rotate(-3deg) scale(1.4);opacity:0;transition:transform .18s var(--ease-mech),opacity .18s}
+.stamp.on{opacity:1;transform:rotate(-3deg) scale(1)}
+.board .foot{display:flex;justify-content:space-between;gap:1rem;padding-top:.7rem;font-family:var(--mono);font-size:.7rem;color:#8d929b;flex-wrap:wrap}
+.board .foot a{color:#b9c6ff;background-image:linear-gradient(#b9c6ff,#b9c6ff)}
+
+/* ── demo console (under the board) ─────────────────────── */
+.console{margin-top:.9rem;font-family:var(--mono);font-size:.8rem;color:var(--muted);min-height:1.4rem}
+.console .ok{color:var(--delivered)}.console .err{color:var(--refund)}
+
+/* ── ruled rows ────────────────────────────────────────── */
+section.rows{padding-block:clamp(2.5rem,2rem + 3vw,5rem);border-top:1px solid var(--rule)}
+section.rows h2{font-size:var(--t-xl);margin:.4rem 0 1.6rem;max-width:24ch}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gutter)}
+.row-l{display:grid;grid-template-columns:3rem 1fr;gap:var(--gutter);padding:var(--row) 0;border-top:1px solid var(--rule);align-items:start}
+.row-l:last-child{border-bottom:1px solid var(--rule)}
+.row-l .n{font-family:var(--mono);color:var(--muted);font-size:.9rem;padding-top:.25rem}
+.row-l h3{font-size:var(--t-lg);font-weight:600;margin-bottom:.3rem}
+.row-l p{color:var(--ink);max-width:62ch}
+.row-l .art{font-family:var(--mono);font-size:.82rem;color:var(--muted);margin-top:.5rem;word-break:break-all}
+.row-l .art a{word-break:break-all}
+.split{display:grid;grid-template-columns:5fr 7fr;gap:var(--gutter);align-items:start}
+.split .copy p{max-width:52ch;color:var(--ink)}
+.split .copy p+p{margin-top:.8rem}
+.books{border-top:1px solid var(--rule)}
+.books .ln{display:grid;grid-template-columns:1fr auto;gap:1rem;padding:.75rem 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.books .ln span:first-child{color:var(--muted)}
+.books .ln .v{font-family:var(--mono);font-size:1.05rem;font-variant-numeric:tabular-nums}
+.books .ln.total .v{font-size:1.5rem;font-family:var(--display);font-weight:600}
+.books .ln .v.pos{color:var(--delivered)}
+pre{font-family:var(--mono);font-size:.82rem;line-height:1.55;background:var(--panel);border:1px solid var(--rule);padding:1rem 1.1rem;overflow:auto;white-space:pre;color:var(--ink)}
+pre .c{color:var(--muted)}
+.steps li{padding:.5rem 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:1.6rem 1fr;gap:.6rem}
+.steps li:last-child{border-bottom:1px solid var(--rule)}
+.steps .k{font-family:var(--mono);color:var(--muted);font-size:.85rem}
+.pill{display:inline-block;font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--rule);padding:.15rem .5rem;border-radius:2px;color:var(--muted);margin-right:.4rem}
+footer{border-top:1px solid var(--rule);padding:1.6rem 0 2.4rem;display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:.92rem;color:var(--muted)}
+footer .credit{display:flex;align-items:center;gap:.6rem}
+footer .credit img{height:18px;width:auto;opacity:.8}
+.reveal{opacity:0;transform:translateY(12px);transition:opacity .6s var(--ease-out),transform .6s var(--ease-out);transition-delay:calc(var(--i,0)*70ms)}
+.reveal.in{opacity:1;transform:none}
+@media (max-width:980px){.hero{grid-template-columns:1fr}.split{grid-template-columns:1fr}.board .head,.board .row{grid-template-columns:3rem 1fr 1fr 7.4rem 3.6rem;gap:.4rem}.hero .lede{max-width:none}.hero h1{max-width:none}}
+@media (max-width:640px){.books .ln{grid-template-columns:1fr;gap:.15rem}.books .ln .v{font-size:1rem}.books .ln.total .v{font-size:1.3rem}.board .head{display:none}.board .row{grid-template-columns:2.6rem 1fr 6.6rem;gap:.4rem}.board .row .c-agent,.board .row .c-amt{display:none}.board .row.sub{grid-template-columns:2.6rem 1fr}.bar nav{display:none}.bar .live span{display:none}.flap{width:.7rem;font-size:.8rem;height:1.2rem;line-height:1.2rem}.flaps.status .flap{width:.68rem}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}.mask>span,.board,.reveal,.board .row{opacity:1;transform:none}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="top">
-    <a class="brand" href="/"><img src="/logo.png" alt="" width="28" height="28">ReplayCheck</a>
-    <nav>
-      <a href="#try">Try it</a>
-      <a href="#x402">Pay per run</a>
-      <a class="hide-s" href="https://github.com/ctmakc/replaycheck">GitHub</a>
-    </nav>
-  </header>
+<header class="bar">
+  <a class="brand" href="/"><img src="/logo.png" alt="" width="26" height="26">ReplayCheck <span class="mono" style="color:var(--muted);font-weight:400">on NEAR</span></a>
+  <nav><a href="#how">How a run settles</a><a href="#books">The agent's books</a><a href="#try">Try it</a><a href="https://github.com/ctmakc/replaycheck-near">Repo</a></nav>
+  <span class="live"><i></i><span id="netlabel">testnet</span></span>
+</header>
 
-  <h1>
-    <span class="line"><span>Replay your users' flows</span></span>
-    <span class="line"><span>after every release.</span></span>
-    <span class="line"><span><em>Pay per call, on Celo.</em></span></span>
-  </h1>
-  <main class="grid">
-    <section>
-      <p class="lede reveal">Sign-in, checkout, the assistant chat: ReplayCheck walks through them in a real browser and tells you which ones broke, with screenshots. It owns no browsers and no model. It buys both per call over x402, in USDC on Celo.</p>
-      <ul class="ledger reveal">
-        <li><span class="k">buys</span><span>Chrome session, 1–10 min, buy gateway</span><span class="v">$0.0036–0.009</span></li>
-        <li><span class="k">buys</span><span>plain-language check, Cencori</span><span class="v">$0.01</span></li>
-        <li><span class="k">sells</span><span>one replay run, up to 3 tasks</span><span class="v">0.05 USDC</span></li>
-      </ul>
-      <div class="ids reveal" id="ids">
-        agent wallet <b>0x7Fd33c597ACd183c3AD9006C1FE8e337609cFCd3</b><br>
-        ERC-8004 <b id="agentid">—</b><br>attribution tag <b>celo_17ee521cbfea</b>
-      </div>
-    </section>
-
-    <section id="try" class="console reveal">
-      <h2>Run a replay now</h2>
-      <p class="sub">Free on Celo Sepolia: the agent pays the buy gateway sandbox in test USDC and prints the receipt below.</p>
-      <div class="presets" role="group" aria-label="Example tasks">
-        <button type="button" data-p="login" aria-pressed="true">Sign-in works</button>
-        <button type="button" data-p="badpass">Wrong password is explained</button>
-        <button type="button" data-p="checkbox">Checkbox toggles</button>
-      </div>
-      <form id="f">
-        <div class="row2">
-          <div><label for="name">Task name</label><input id="name" required maxlength="200"></div>
-          <div><label for="url">Start URL (https)</label><input id="url" type="url" required pattern="https://.*"></div>
-        </div>
-        <label for="steps">Steps (JSON)</label>
-        <textarea id="steps" spellcheck="false" required></textarea>
-        <label for="expect">Checks (JSON)</label>
-        <textarea id="expect" spellcheck="false" required style="min-height:104px"></textarea>
-        <div class="go">
-          <button id="run" type="submit">Replay it</button>
-          <span class="note" id="note">about 20–40 s · one rented browser</span>
-        </div>
-      </form>
-      <div class="slot" aria-hidden="true"></div>
-      <div class="tape"><div class="receipt idle" id="receipt" aria-live="polite">The receipt prints here.</div></div>
-    </section>
-  </main>
-
-  <section class="paywith reveal" id="x402">
-    <div>
-      <h2>Pay per run from your own wallet</h2>
-      <p><code>POST /v1/replay</code> answers HTTP 402 with a price of 0.05 USDC to the agent wallet. Any x402 client signs the payment and retries; Celo's x402 facilitator settles it. Your run then buys its own browser session and checks, and the response lists each of those payments.</p>
-      <p>Limits: 3 tasks, 12 steps and 4 checks per task, https start URLs.</p>
+<section class="hero" id="top">
+  <div>
+    <p class="eyebrow mask"><span>NEAR Hackathon 2026 · <b>Agent Economy</b> · Autonomous Business</span></p>
+    <h1><span class="mask"><span>A QA agent</span></span><span class="mask"><span>that gets paid in Ⓝ</span></span><span class="mask"><span>and pays its suppliers.</span></span></h1>
+    <p class="lede mask"><span>ReplayCheck replays your sign-in and checkout in a real browser after every release. <b>The customer escrows the fee on a NEAR contract. The agent rents browser minutes from another agent over HTTP 402. The report hash on-chain releases the payment.</b></span></p>
+    <p class="note mask"><span>Every row on the board to the right is a job on <a id="contractlink" class="mono" href="#">the market contract</a>. The button runs the whole loop with testnet accounts: no wallet needed to watch it.</span></p>
+    <div class="cta mask"><span style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <button class="btn primary" id="run">Run a paid job <span class="mono">0.05 Ⓝ · testnet</span></button>
+      <a class="btn ghost" href="https://github.com/ctmakc/replaycheck-near">Read the code</a>
+    </span></div>
+    <p class="console" id="console" aria-live="polite"></p>
+  </div>
+  <div>
+    <div class="board" id="board" aria-label="Job board">
+      <div class="head"><span>Job</span><span>Customer</span><span>Agent</span><span>Status</span><span style="text-align:right">Fee Ⓝ</span></div>
+      <div id="rows"><div class="empty">reading the market contract…</div></div>
+      <div class="foot"><span id="stats">—</span><span>market <a id="contractlink2" href="#" class="mono">—</a></span></div>
     </div>
-    <pre><span class="c"># tasks.json holds {"tasks":[ ... ]} in the format of the form above</span>
-npx @celo/buy curl --max-amount 0.06 \
-  -X POST -H 'content-type: application/json' \
-  --data-file tasks.json \
-  <span id="endpoint">https://replaycheck.mmix.biz</span>/v1/replay
+  </div>
+</section>
 
-<span class="c"># test first on Celo Sepolia with free sandbox USDC</span>
-npx @celo/buy --sandbox curl ...</pre>
-  </section>
+<section class="rows" id="how">
+  <p class="eyebrow reveal">The loop</p>
+  <h2 class="reveal" style="--i:1">How a run settles, in five transactions</h2>
+  <div class="row-l reveal" style="--i:1"><span class="n">01</span><div><h3>The customer funds a job</h3><p><span class="mono">post_job(agent, spec_hash)</span> with the agent's price attached. <span class="mono">spec_hash</span> is SHA-256 of the task list, so the agent can only be paid for the flows that were ordered. The deposit sits in the contract, in nobody's wallet.</p><p class="art" id="art-post">last run: —</p></div></div>
+  <div class="row-l reveal" style="--i:2"><span class="n">02</span><div><h3>The agent accepts and the clock starts</h3><p><span class="mono">accept_job</span> is allowed only for the listed agent. It sets a deadline; if the report never comes, the customer calls <span class="mono">refund</span> and the deposit returns.</p><p class="art" id="art-accept">last run: —</p></div></div>
+  <div class="row-l reveal" style="--i:3"><span class="n">03</span><div><h3>The agent buys what it needs from another agent</h3><p>The browser worker answers <span class="mono">HTTP 402</span> with an invoice: account, amount, a one-time memo. The agent pays through <span class="mono">pay(to, memo)</span> on the same contract, which forwards the NEAR and logs a NEP-297 event. The worker reads that event from the transaction and opens the session. Same for a judgement call when a check is written in plain language. We call the pattern <b>near402</b>; the client and the gate are ~150 lines in <span class="mono">src/near402.js</span>.</p><p class="art" id="art-pay">last run: —</p></div></div>
+  <div class="row-l reveal" style="--i:4"><span class="n">04</span><div><h3>Delivery is a hash</h3><p><span class="mono">deliver(job_id, report_hash, passed, total, report_url)</span>. The report (JSON plus screenshots) stays with the agent; its SHA-256 and the pass count are on-chain, so a CI pipeline can gate a release on <span class="mono">passed == total</span> without trusting the agent's web page.</p><p class="art" id="art-deliver">last run: —</p></div></div>
+  <div class="row-l reveal" style="--i:5"><span class="n">05</span><div><h3>The same call releases the escrow</h3><p>No second step, no invoice to chase: the deposit moves to the agent inside the <span class="mono">deliver</span> receipt. The customer re-hashes the report they received and compares. <span class="mono">replaycheck verify &lt;job_id&gt; report.json</span> does exactly that.</p><p class="art" id="art-verify">—</p></div></div>
+</section>
 
-  <footer>
-    <span>ReplayCheck · INNOVA CONSULT LTD. · Agents on Open Rails 2026 · <a href="https://github.com/ctmakc/replaycheck">source</a></span>
-    <a class="credit" href="https://mmix.ua/" rel="noopener">Development &amp; promotion — <img src="/mmix-logo.png" alt="MMIX — Marketing Mix" height="36"></a>
-  </footer>
+<section class="rows" id="books">
+  <div class="split">
+    <div class="copy">
+      <p class="eyebrow reveal">Autonomous business</p>
+      <h2 class="reveal" style="--i:1">The agent keeps its own books, on-chain</h2>
+      <p class="reveal" style="--i:2">Revenue is every <span class="mono">deliver</span>; cost is every <span class="mono">pay</span> to the worker. Both are events on one contract, so the margin below is read from the chain, not from a database the agent controls.</p>
+      <p class="reveal" style="--i:3">On testnet both agents are ours. The point is the shape: a service that sells, buys, and settles without a human issuing or approving invoices, with a refund path the customer can trigger alone.</p>
+    </div>
+    <div class="books reveal" style="--i:2" id="booksbox">
+      <div class="ln"><span>Jobs delivered</span><span class="v" id="b-jobs">—</span></div>
+      <div class="ln"><span>Revenue (escrow released to the agent)</span><span class="v" id="b-rev">—</span></div>
+      <div class="ln"><span>Cost (near402 payments to the worker)</span><span class="v" id="b-cost">—</span></div>
+      <div class="ln"><span>Refunds to customers</span><span class="v" id="b-ref">—</span></div>
+      <div class="ln total"><span>Gross margin</span><span class="v pos" id="b-margin">—</span></div>
+      <div class="ln"><span>Agent balance now</span><span class="v" id="b-bal">—</span></div>
+      <div class="ln"><span>Worker price list</span><span class="v mono" id="b-worker">—</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="rows" id="try">
+  <div class="split">
+    <div class="copy">
+      <p class="eyebrow reveal">Try it</p>
+      <h2 class="reveal" style="--i:1">Run the market yourself, or order a run from this agent</h2>
+      <p class="reveal" style="--i:2">Everything is free on testnet: the setup script creates the accounts through the faucet, deploys the contract, lists the agent and starts the worker. Node 22 and a Rust toolchain for the contract (a prebuilt wasm is committed).</p>
+      <ol class="steps reveal" style="--i:3">
+        <li><span class="k">1</span><span>Clone, <span class="mono">npm install</span>, <span class="mono">npx playwright install chromium</span>.</span></li>
+        <li><span class="k">2</span><span><span class="mono">npm run setup:testnet</span> → <span class="mono">.env.near</span> with five fresh accounts.</span></li>
+        <li><span class="k">3</span><span><span class="mono">npm run worker</span> and <span class="mono">npm run serve</span> in two terminals.</span></li>
+        <li><span class="k">4</span><span><span class="mono">npm run demo</span> → the customer funds job #0, the agent runs it, the CLI verifies the hash. Exit code 0 means every flow passed.</span></li>
+      </ol>
+    </div>
+    <div class="reveal" style="--i:2">
+<pre><span class="c"># order a run from THIS agent with your own testnet account</span>
+export REPLAYCHECK_CONTRACT_ID=<span id="c-contract">market.….testnet</span>
+export REPLAYCHECK_CUSTOMER_ID=you.testnet REPLAYCHECK_CUSTOMER_KEY=ed25519:…
+node bin/replaycheck.js order tasks/demo.json \
+  --agent <span id="c-agent">agent.….testnet</span> --url https://replaycheck-near.mmix.biz/v1
+
+<span class="c"># read the books without any tooling</span>
+near view <span id="c-contract2">market.….testnet</span> get_stats
+near view <span id="c-contract3">market.….testnet</span> get_recent_jobs '{"limit": 5}'</pre>
+      <p style="margin-top:.8rem;color:var(--muted);font-size:.92rem">Task format: <a href="/tasks/demo.json" class="mono">tasks/demo.json</a> replays sign-in on a demo storefront at <a href="/shop/login" class="mono">/shop/login</a>. Steps are <span class="mono">open · fill · click · press · wait · scroll</span>; checks are literal or plain-language.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div><span class="pill">NEAR Hackathon 2026</span><span class="pill">testnet</span> Second entry by the same author; the first is <a href="https://github.com/ctmakc/redactgate/tree/near-hackathon">RedactGate audit anchor</a>. Independent code, independent contracts.</div>
+  <div class="credit"><a href="https://github.com/ctmakc/replaycheck-near">github.com/ctmakc/replaycheck-near</a> · <span>INNOVA CONSULT LTD, Ottawa</span></div>
+</footer>
 </div>
 
 <script>
-const PRESETS = {
-  login: { name: 'Sign in with valid credentials reaches the secure area', url: 'https://the-internet.herokuapp.com/login',
-    steps: [{action:'fill',target:'#username',text:'tomsmith'},{action:'fill',target:'#password',text:'SuperSecretPassword!'},{action:'click',target:'button[type=submit]'},{action:'wait',target:'#flash'}],
-    expect: [{urlContains:'/secure'},{textContains:'You logged into a secure area'}] },
-  badpass: { name: 'A wrong password is rejected with a clear message', url: 'https://the-internet.herokuapp.com/login',
-    steps: [{action:'fill',target:'#username',text:'tomsmith'},{action:'fill',target:'#password',text:'wrong-password'},{action:'click',target:'button[type=submit]'},{action:'wait',target:'#flash'}],
-    expect: [{textContains:'Your password is invalid'},{urlContains:'/login'}] },
-  checkbox: { name: 'The first checkbox can be ticked', url: 'https://the-internet.herokuapp.com/checkboxes',
-    steps: [{action:'check',target:'#checkboxes input:nth-of-type(1)'}],
-    expect: [{titleContains:'The Internet'},{textContains:'Checkboxes'}] },
-};
-const $ = (s) => document.querySelector(s);
-function load(k){ const p=PRESETS[k]; $('#name').value=p.name; $('#url').value=p.url; const fmt=(a)=>'[\n'+a.map(o=>'  '+JSON.stringify(o)).join(',\n')+'\n]'; $('#steps').value=fmt(p.steps); $('#expect').value=fmt(p.expect);
-  document.querySelectorAll('.presets button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.p===k))); }
-document.querySelectorAll('.presets button').forEach(b=>b.addEventListener('click',()=>load(b.dataset.p)));
-load('login');
+(() => {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s) => document.querySelector(s);
+  const explorer = { testnet: 'https://testnet.nearblocks.io', mainnet: 'https://nearblocks.io' };
+  let net = 'testnet', contract = '', agentId = '';
+  const txUrl = (h) => `${explorer[net]}/txns/${h}`;
+  const accUrl = (a) => `${explorer[net]}/address/${a}`;
+  const fmt = (y, d = 3) => { try { const b = BigInt(y); const w = b / 10n ** 24n; const f = (b % 10n ** 24n).toString().padStart(24, '0').slice(0, d).replace(/0+$/, ''); return f ? `${w}.${f}` : `${w}`; } catch { return '—'; } };
+  const short = (a) => a.length > 22 ? a.slice(0, 10) + '…' + a.slice(-9) : a;
 
-fetch('/v1/health').then(r=>r.json()).then(h=>{ if(h.agentId) $('#agentid').textContent = `#${h.agentId} on ${h.network}`; }).catch(()=>{});
-$('#endpoint').textContent = location.origin.startsWith('http') && !location.hostname.includes('127.0.0.1') ? location.origin : 'https://replaycheck.mmix.biz';
+  // ── split-flap primitives ─────────────────────────────
+  function flaps(text, width) {
+    const t = String(text).padEnd(width).slice(0, width);
+    const wrap = document.createElement('span'); wrap.className = 'flaps';
+    for (const ch of t) {
+      const f = document.createElement('span'); f.className = 'flap'; f.dataset.ch = ch;
+      f.innerHTML = `<span class="h t"><span>${esc(ch)}</span></span><span class="h b"><span>${esc(ch)}</span></span>`;
+      wrap.appendChild(f);
+    }
+    return wrap;
+  }
+  function esc(s) { return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+  const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const FLIP = { duration: 120, easing: 'cubic-bezier(.2,.9,.2,1)', fill: 'none' };
+  function flipTo(f, g) {
+    const t = f.querySelector('.t'), b = f.querySelector('.b');
+    const done = () => { t.querySelector('span').textContent = g; b.querySelector('span').textContent = g; f.dataset.ch = g; };
+    if (reduced || !t.animate) { done(); return Promise.resolve(); }
+    b.querySelector('span').textContent = g;                        // new char waits on the bottom half
+    return t.animate([{ transform: 'none' }, { transform: 'rotateX(-90deg)' }], FLIP).finished
+      .then(() => { t.querySelector('span').textContent = g; f.dataset.ch = g;
+        return b.animate([{ transform: 'rotateX(90deg)' }, { transform: 'none' }], FLIP).finished; })
+      .then(done, done);
+  }
+  function setFlaps(wrap, text) {
+    const width = wrap.children.length; const t = String(text).padEnd(width).slice(0, width);
+    [...wrap.children].forEach((f, i) => {
+      const to = t[i]; if (f.dataset.ch === to) return;
+      if (reduced) { flipTo(f, to); return; }
+      // flip through one intermediate glyph then land, staggered left→right
+      const mid = GLYPHS[(GLYPHS.indexOf(to) + 7) % GLYPHS.length] || to;
+      setTimeout(() => flipTo(f, mid).then(() => flipTo(f, to)), i * 28);
+    });
+  }
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // ── board rows ────────────────────────────────────────
+  const rows = $('#rows'); const rowEls = new Map();
+  function statusWord(j) { return j.status === 'Open' ? 'POSTED' : j.status.toUpperCase(); }
+  function makeRow(job) {
+    const r = document.createElement('div'); r.className = 'row'; r.dataset.id = job.id;
+    r.innerHTML = `<span class="c-id"></span><span class="c-cust"></span><span class="c-agent"></span><span class="c-st"></span><span class="c-amt amt"></span>`;
+    r.querySelector('.c-id').appendChild(flaps(String(job.id).padStart(3, '0'), 3));
+    r.querySelector('.c-cust').appendChild(flaps(short(job.customer).replace('.testnet', '').toUpperCase(), 14));
+    r.querySelector('.c-agent').appendChild(flaps(short(job.agent).replace('.testnet', '').toUpperCase(), 14));
+    const st = flaps('', 9); st.classList.add('status'); r.querySelector('.c-st').appendChild(st);
+    r.querySelector('.c-amt').textContent = fmt(job.deposit, 3);
+    const sub = document.createElement('div'); sub.className = 'row sub'; sub.innerHTML = `<span></span><span class="links"></span>`;
+    r._sub = sub;
+    return r;
+  }
+  function paintRow(r, job, extra = {}) {
+    const word = extra.status || statusWord(job);
+    const st = r.querySelector('.c-st .flaps');
+    st.className = 'flaps status st-' + word;
+    setFlaps(st, word);
+    const amt = r.querySelector('.c-amt'); amt.classList.toggle('paid', word === 'DELIVERED');
+    const links = r._sub.querySelector('.links'); const parts = [];
+    if (job.report_url && word === 'DELIVERED') parts.push(`<a href="${job.report_url}">report ${job.passed}/${job.total}</a>`);
+    if (job.report_hash) parts.push(`<span title="sha256 of report.json">hash ${job.report_hash.slice(0, 16)}…</span>`);
+    for (const [k, h] of Object.entries(extra.tx || {})) parts.push(`<a href="${txUrl(h)}">${k} ${h.slice(0, 8)}…</a>`);
+    if (!parts.length && job.spec_hash) parts.push(`<span>spec ${job.spec_hash.slice(0, 16)}…</span>`);
+    links.innerHTML = parts.join(' · ');
+    if (word === 'DELIVERED' && !r.querySelector('.stamp')) { const s = document.createElement('span'); s.className = 'stamp'; s.textContent = `paid ${fmt(job.deposit, 3)} Ⓝ`; r._sub.firstChild.replaceWith(s); requestAnimationFrame(() => setTimeout(() => s.classList.add('on'), 400)); }
+  }
+  function upsertRow(job, extra, { top = false } = {}) {
+    let r = rowEls.get(job.id);
+    if (!r) {
+      r = makeRow(job); rowEls.set(job.id, r);
+      const empty = rows.querySelector('.empty'); if (empty) empty.remove();
+      if (top) { rows.prepend(r._sub); rows.prepend(r); } else { rows.append(r); rows.append(r._sub); }
+      requestAnimationFrame(() => { r.classList.add('in'); r._sub.classList.add('in'); });
+    }
+    paintRow(r, job, extra);
+    return r;
+  }
 
-function printReceipt(html){
-  const r = $('#receipt'); r.className = 'receipt'; r.innerHTML = html;
-  if (reduce) { r.querySelectorAll('.print').forEach(e=>e.classList.add('on')); return; }
-  void r.offsetWidth; r.classList.add('feed');
-  r.querySelectorAll('.print').forEach((e,i)=>setTimeout(()=>e.classList.add('on'), 420 + i*90));
-}
+  async function loadJobs(limit = 6) {
+    try {
+      const jobs = await (await fetch(`/v1/jobs?limit=${limit}`)).json();
+      if (!jobs.length) rows.innerHTML = '<div class="empty">no jobs yet — press the button</div>';
+      jobs.forEach((j, i) => setTimeout(() => upsertRow(j), reduced ? 0 : i * 60));
+      // trim beyond limit
+      [...rowEls.keys()].sort((a, b) => b - a).slice(limit).forEach((id) => { const r = rowEls.get(id); r.remove(); r._sub.remove(); rowEls.delete(id); });
+      return jobs;
+    } catch (e) { rows.innerHTML = `<div class="empty">could not read the contract: ${esc(e.message)}</div>`; return []; }
+  }
 
-$('#f').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  let steps, expect;
-  try { steps = JSON.parse($('#steps').value); expect = JSON.parse($('#expect').value); }
-  catch { $('#note').textContent = 'Steps and checks must be valid JSON.'; return; }
-  const task = { id: 'demo', name: $('#name').value, startUrl: $('#url').value, steps, expect };
-  $('#run').disabled = true; $('#note').innerHTML = 'renting a browser <span class="spinner">▍</span>';
-  const r = $('#receipt'); r.className = 'receipt idle'; r.innerHTML = 'paying the buy gateway, driving the browser <span class="spinner">▍</span>';
-  const t0 = Date.now();
-  try {
-    const res = await fetch('/demo/run', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ tasks:[task] }) });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || ('HTTP '+res.status));
-    const t = j.results[0]; const sec = ((Date.now()-t0)/1000).toFixed(1);
-    const L = (a,b,cls='') => `<div class="ln print ${cls}"><span>${a}</span><span>${b}</span></div>`;
-    let h = `<span class="hd print">REPLAYCHECK</span><div class="mut print" style="text-align:center">${esc(j.network)} · ${esc(new Date().toISOString().slice(0,19).replace('T',' '))} UTC</div><div class="cut print"></div>`;
-    h += L('RUN', esc(j.runId.slice(-6)));
-    h += L(esc(t.name).slice(0,60), t.status==='pass' ? '<span class="p">PASS</span>' : `<span class="f">${esc(t.status.toUpperCase())}</span>`);
-    for (const c of t.checks||[]) h += L(`&nbsp;&nbsp;${c.pass?'✓':'✗'} ${esc(c.type)}: ${esc(String(c.value).slice(0,46))}`, '', c.pass?'':'f');
-    if (t.error) h += `<div class="ln print f"><span>${esc(t.error).slice(0,160)}</span></div>`;
-    if (t.screenshots?.length) h += `<div class="shots print">${t.screenshots.map(s=>`<a href="${esc(j.reportBase)}/${esc(t.id)}/${esc(s)}"><img alt="screenshot ${esc(s)}" src="${esc(j.reportBase)}/${esc(t.id)}/${esc(s)}"></a>`).join('')}</div>`;
-    h += `<div class="cut print"></div>`;
-    let total = 0;
-    for (const p of j.upstreamPaidCalls||[]) { total += p.usd; h += L(`${esc(p.capability||p.provider)}<br><a href="${esc(p.explorer)}">${esc((p.txHash||'').slice(0,18))}…</a>`, `$${p.usd.toFixed(6)}`); }
-    h += `<div class="cut print"></div>` + L('<b>PAID BY AGENT</b>', `<b>$${total.toFixed(6)}</b>`) + L('time', `${sec} s`, 'mut');
-    h += `<div class="ln print"><span><a href="${esc(j.report)}">full report →</a></span><span class="mut">x402 · Celo</span></div>`;
-    printReceipt(h);
-    $('#note').textContent = 'done · try another preset or your own page';
-  } catch (e) {
-    printReceipt(`<span class="hd print">REPLAYCHECK</span><div class="cut print"></div><div class="ln print f"><span>${esc(e.message)}</span></div>`);
-    $('#note').textContent = 'run did not finish';
-  } finally { $('#run').disabled = false; }
-});
+  async function loadAgent() {
+    const a = await (await fetch('/v1/agent')).json();
+    net = a.network; contract = a.contract; agentId = a.agent;
+    $('#netlabel').textContent = `NEAR ${net} · ${a.listing ? fmt(a.listing.price, 3) + ' Ⓝ per job' : 'unlisted'}`;
+    for (const id of ['contractlink', 'contractlink2']) { const el = $('#' + id); el.href = accUrl(contract); el.textContent = contract; }
+    for (const id of ['c-contract', 'c-contract2', 'c-contract3']) $('#' + id).textContent = contract;
+    $('#c-agent').textContent = agentId;
+    const s = a.stats || {};
+    $('#stats').textContent = `${s.jobs ?? 0} jobs · ${s.delivered ?? 0} delivered · ${s.payments ?? 0} near402 payments`;
+    $('#b-jobs').textContent = s.delivered ?? '—';
+    $('#b-rev').textContent = `${fmt(s.paid_to_agents || 0, 4)} Ⓝ`;
+    $('#b-cost').textContent = `${fmt(s.payment_volume || 0, 4)} Ⓝ`;
+    $('#b-ref').textContent = `${s.refunded ?? 0}`;
+    try { const m = BigInt(s.paid_to_agents || 0) - BigInt(s.payment_volume || 0); $('#b-margin').textContent = `${m < 0n ? '−' : ''}${fmt(m < 0n ? -m : m, 4)} Ⓝ`; $('#b-margin').classList.toggle('pos', m >= 0n); } catch {}
+    $('#b-bal').textContent = a.balanceNear ? `${a.balanceNear} Ⓝ` : '—';
+    $('#b-worker').textContent = a.worker ? `${a.worker.prices.per_minute_near} Ⓝ/min · judge ${a.worker.prices.judge_near} Ⓝ` : 'worker offline';
+    return a;
+  }
 
-// entrance: masked lines rise with an overlapping stagger, then the rest settles in on scroll
-if (!reduce) {
-  document.querySelectorAll('h1 .line>span').forEach((s,i)=>{ s.animate([{transform:'translateY(105%)'},{transform:'none'}],{duration:820,delay:80+i*110,easing:'cubic-bezier(.16,1,.3,1)',fill:'both'}); });
-  const io = new IntersectionObserver((es)=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }),{threshold:.12});
-  document.querySelectorAll('.reveal').forEach((el,i)=>{ el.style.transitionDelay = (i<3? 380+i*90 : 0)+'ms'; io.observe(el); });
-} else document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in'));
+  function showArt(id, html) { const el = $('#' + id); if (el) el.innerHTML = html; }
+  function paintLastRun(jobs) {
+    const j = jobs.find((x) => x.status === 'Delivered'); if (!j) return;
+    showArt('art-deliver', `last run: job #${j.id} · report hash <span>${j.report_hash}</span> · ${j.passed}/${j.total} passed · <a href="${j.report_url}">report</a>`);
+    showArt('art-verify', `job #${j.id}: <span class="mono">sha256(report.json) == ${j.report_hash.slice(0, 20)}…</span> on-chain. Fetch <a href="${(j.report_url || '').replace('index.html', 'report.json')}">report.json</a> and hash it yourself.`);
+    showArt('art-post', `last run: job #${j.id} by <a href="${accUrl(j.customer)}">${j.customer}</a> · deposit ${fmt(j.deposit, 3)} Ⓝ · spec ${j.spec_hash.slice(0, 20)}…`);
+    showArt('art-accept', `last run: accepted at block time ${new Date(Number(BigInt(j.accepted_at_ns || 0) / 1000000n)).toISOString().replace('T', ' ').slice(0, 19)} UTC · deadline +${Math.round(Number(j.timeout_ns) / 60e9)} min`);
+  }
+
+  // ── the demo run ──────────────────────────────────────
+  const btn = $('#run'), con = $('#console');
+  let lastEvent = Date.now();
+  function say(msg, cls = '') { con.innerHTML = `<span class="${cls}">${msg}</span>`; }
+  async function poll(state) {
+    try {
+      const evs = await (await fetch(`/v1/events?since=${lastEvent}`)).json();
+      for (const e of evs) {
+        lastEvent = Math.max(lastEvent, e.t);
+        if (e.kind === 'demo' && e.stage === 'posting') say(`customer ${e.customer} is funding a job…`);
+        if (e.kind === 'job' && e.stage === 'posted') { state.job = { id: e.jobId, customer: e.customer, agent: agentId, deposit: e.deposit, status: 'Open' }; state.tx.post = e.tx; upsertRow(state.job, { status: 'POSTED', tx: state.tx }, { top: true }); say(`job #${e.jobId} funded · <a href="${e.url}">tx</a>`); }
+        if (e.kind === 'job' && e.stage === 'verified' && state.job) say(`agent verified spec hash ${e.hash.slice(0, 12)}…`);
+        if (e.kind === 'job' && e.stage === 'accepted' && state.job) { state.tx.accept = e.tx; upsertRow(state.job, { status: 'ACCEPTED', tx: state.tx }); say(`accepted · <a href="${e.url}">tx</a> · renting a browser from the worker…`); }
+        if (e.kind === 'task' && e.stage === 'start' && state.job) { upsertRow(state.job, { status: 'RENTING', tx: state.tx }); say(`replaying ${e.id} in a rented browser…`); }
+        if (e.kind === 'task' && e.stage !== 'start' && state.job) { const paid = (e.paid || []).map((p) => `<a href="${txUrl(p.txHash)}">${p.what} ${fmt(p.amount, 3)} Ⓝ</a>`).join(', '); say(`${e.id}: ${e.stage.toUpperCase()} · paid worker: ${paid || '—'}`, e.stage === 'pass' ? 'ok' : ''); }
+        if (e.kind === 'job' && e.stage === 'delivered' && state.job) { state.tx.deliver = e.tx; Object.assign(state.job, { status: 'Delivered', report_url: e.reportUrl, report_hash: e.reportHash, passed: e.passed, total: e.total }); upsertRow(state.job, { status: 'DELIVERED', tx: state.tx }); }
+        if (e.kind === 'error') say(`error: ${esc(e.message)}`, 'err');
+      }
+    } catch {}
+  }
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; say('loading tasks…');
+    const state = { tx: {} };
+    const tasks = (await (await fetch('/tasks/demo.json')).json()).tasks;
+    lastEvent = Date.now() - 1000;
+    const timer = setInterval(() => poll(state), 1500);
+    try {
+      const r = await fetch('/demo/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tasks }) });
+      let j = await r.json();
+      if (r.status === 202) {
+        // the run takes a couple of minutes; the server answered 202 with a status URL
+        const deadline = Date.now() + 15 * 60e3;
+        while (Date.now() < deadline) {
+          await new Promise((res) => setTimeout(res, 2500));
+          const st = await fetch(`/v1/runs/${j.jobId}`).then((x) => x.json()).catch(() => null);
+          if (st?.state === 'done') { j = st.result; break; }
+          if (st?.state === 'error') { j = { error: st.error }; break; }
+        }
+      }
+      await poll(state); clearInterval(timer);
+      if (!r.ok || j.error || !j.tx) { say(`${esc(j.error || 'failed')}`, 'err'); }
+      else {
+        say(`delivered · ${j.passed}/${j.total} passed · earned ${j.earnedNear} Ⓝ, spent ${j.spentNear} Ⓝ on the worker · <a href="${j.report}">report</a> · <a href="${j.tx.deliverUrl}">deliver tx</a>`, 'ok');
+        showArt('art-pay', `last run: ${j.upstreamPaidCalls.map((p) => `<a href="${p.explorer}">${p.label} ${p.near} Ⓝ</a>`).join(' · ')}`);
+        const jobs = await loadJobs(); paintLastRun(jobs); await loadAgent();
+      }
+    } catch (e) { clearInterval(timer); say(`request failed: ${esc(e.message)}`, 'err'); }
+    btn.disabled = false;
+  });
+
+  // ── boot ──────────────────────────────────────────────
+  const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }, { rootMargin: '0px 0px -10% 0px' });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+  requestAnimationFrame(() => document.documentElement.classList.add('ready'));
+  (async () => {
+    try { await loadAgent(); } catch { $('#netlabel').textContent = 'agent offline'; }
+    const jobs = await loadJobs(); paintLastRun(jobs);
+    // keep the board honest while idle: other people may be posting jobs
+    setInterval(async () => { if (btn.disabled) return; const js = await loadJobs(); paintLastRun(js); }, 20000);
+  })();
+})();
 </script>
 </body>
 </html>

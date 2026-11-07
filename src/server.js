@@ -22,7 +22,7 @@ import { receipts } from './near402.js';
 import { agentAccount, accountFromEnv, getJob, getAgent, getStats, getRecentJobs, acceptJob, deliver, postJob, specHash, balance } from './near.js';
 import { network, CONTRACT_ID, WORKER_URL, fmtNear, txUrl } from './config.js';
 
-const PORT = Number(process.env.PORT || 8744);
+const PORT = Number(process.env.PORT || 8746);
 const PUBLIC_BASE = process.env.REPLAYCHECK_PUBLIC_BASE || `http://127.0.0.1:${PORT}`;
 const MAX_TASKS = 3, MAX_STEPS = 12;
 const DEMO_PER_HOUR = Number(process.env.REPLAYCHECK_DEMO_PER_HOUR || 20);
@@ -34,8 +34,32 @@ const STATIC = {
   '/mmix-logo.png': ['public/mmix-logo.png', 'image/png'],
   '/demo.mp4': ['public/demo.mp4', 'video/mp4'],
   '/tasks/demo.json': ['tasks/demo.json', 'application/json'],
+  // Demo storefront the sample tasks replay against (public/shop).
+  '/shop/login': ['public/shop/login.html', 'text/html; charset=utf-8'],
+  '/shop/account': ['public/shop/account.html', 'text/html; charset=utf-8'],
+  '/shop/style.css': ['public/shop/style.css', 'text/css; charset=utf-8'],
 };
 const events = []; // live feed for the demo page: last 200 events
+// Runs in flight or finished in this process: jobId -> { state, startedAt, finishedAt, result | error }.
+// Replays take minutes and proxies cut long responses, so POST answers 202 and clients poll GET /v1/runs/:id.
+const runs = new Map();
+function startRun(jobId, tasks, payer, extra = {}) {
+  const run = { jobId, state: 'running', startedAt: new Date().toISOString(), ...extra };
+  runs.set(jobId, run);
+  serveJob(jobId, tasks, { payer })
+    .then((result) => Object.assign(run, { state: 'done', finishedAt: new Date().toISOString(), result: { ...result, ...extra } }))
+    .catch((e) => { emit('error', { jobId, message: e.message }); Object.assign(run, { state: 'error', finishedAt: new Date().toISOString(), error: e.message }); });
+  return run;
+}
+async function precheck(jobId, tasks) {
+  const job = await getJob(jobId);
+  if (!job) throw Object.assign(new Error(`job ${jobId} does not exist on ${CONTRACT_ID()}`), { status: 404 });
+  if (job.agent !== agent.accountId) throw Object.assign(new Error(`job ${jobId} is for ${job.agent}, this agent is ${agent.accountId}`), { status: 403 });
+  if (job.status !== 'Open') throw Object.assign(new Error(`job ${jobId} is ${job.status}, expected Open`), { status: 409 });
+  const hash = specHash(tasks);
+  if (hash !== job.spec_hash) throw Object.assign(new Error(`task spec hash ${hash} does not match the job's ${job.spec_hash}`), { status: 400 });
+  return job;
+}
 function emit(kind, data) { events.push({ t: Date.now(), kind, ...data }); if (events.length > 200) events.shift(); }
 
 function send(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(obj)); }
@@ -56,12 +80,8 @@ function validate(body) {
 
 /** The paid loop for one funded job. */
 async function serveJob(jobId, tasks, { payer }) {
-  const job = await getJob(jobId);
-  if (!job) throw Object.assign(new Error(`job ${jobId} does not exist on ${CONTRACT_ID()}`), { status: 404 });
-  if (job.agent !== agent.accountId) throw Object.assign(new Error(`job ${jobId} is for ${job.agent}, this agent is ${agent.accountId}`), { status: 403 });
-  if (job.status !== 'Open') throw Object.assign(new Error(`job ${jobId} is ${job.status}, expected Open`), { status: 409 });
-  const hash = specHash(tasks);
-  if (hash !== job.spec_hash) throw Object.assign(new Error(`task spec hash ${hash} does not match the job's ${job.spec_hash}`), { status: 400 });
+  const job = await precheck(jobId, tasks);
+  const hash = job.spec_hash;
 
   const runId = `job-${jobId}-` + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const outDir = join('reports', 'runs', runId);
@@ -110,6 +130,13 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { agent: agent.accountId, network: network().slug, contract: CONTRACT_ID(), listing, stats, balance: bal?.toString() ?? null, balanceNear: bal != null ? fmtNear(bal, 4) : null, worker, explorer: network().explorer });
     }
     if (req.method === 'GET' && url.pathname === '/v1/jobs') return send(res, 200, await getRecentJobs(Number(url.searchParams.get('limit') || 20)));
+    if (req.method === 'GET' && url.pathname.startsWith('/v1/runs/')) {
+      const id = Number(url.pathname.split('/')[3]);
+      const run = runs.get(id);
+      if (run) return send(res, 200, run);
+      const job = await getJob(id).catch(() => null);
+      return send(res, job ? 200 : 404, job ? { jobId: id, state: 'unknown-to-this-process', onchain: job } : { error: 'no such job' });
+    }
     if (req.method === 'GET' && url.pathname === '/v1/events') {
       const since = Number(url.searchParams.get('since') || 0);
       return send(res, 200, events.filter((e) => e.t > since));
@@ -129,8 +156,11 @@ const server = createServer(async (req, res) => {
       let body; try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'invalid json' }); }
       const err = validate(body); if (err) return send(res, 400, { error: err });
       if (!Number.isInteger(body.job_id) || body.job_id < 0) return send(res, 400, { error: 'job_id (integer) is required: post the job on the market contract first' });
-      try { return send(res, 200, await serveJob(body.job_id, body.tasks, { payer: null })); }
-      catch (e) { emit('error', { jobId: body.job_id, message: e.message }); return send(res, e.status || 500, { error: e.message }); }
+      if (runs.get(body.job_id)?.state === 'running') return send(res, 409, { error: `job ${body.job_id} is already running` });
+      try { await precheck(body.job_id, body.tasks); }
+      catch (e) { return send(res, e.status || 500, { error: e.message }); }
+      startRun(body.job_id, body.tasks, null);
+      return send(res, 202, { jobId: body.job_id, state: 'running', status: `${PUBLIC_BASE}/v1/runs/${body.job_id}`, note: 'poll the status URL every few seconds; the report appears there when deliver() has been sent' });
     }
     if (req.method === 'POST' && url.pathname === '/demo/run') {
       if (network().slug !== 'testnet') return send(res, 403, { error: 'free demo runs only on testnet; use POST /v1/replay with a funded job' });
@@ -149,10 +179,11 @@ const server = createServer(async (req, res) => {
         emit('demo', { stage: 'posting', customer: customer.accountId, hash });
         const posted = await postJob(customer, agent.accountId, hash, BigInt(listing.price));
         emit('job', { jobId: posted.jobId, stage: 'posted', tx: posted.hash, url: txUrl(posted.hash), customer: customer.accountId, deposit: listing.price });
-        const out = await serveJob(posted.jobId, body.tasks, { payer: customer.accountId });
-        return send(res, 200, { ...out, customer: customer.accountId, tx: { ...out.tx, post: posted.hash, postUrl: txUrl(posted.hash) } });
-      } catch (e) { emit('error', { message: e.message }); return send(res, e.status || 500, { error: e.message }); }
-      finally { demoBusy = false; }
+        const run = startRun(posted.jobId, body.tasks, customer.accountId, { customer: customer.accountId, postTx: posted.hash, postTxUrl: txUrl(posted.hash) });
+        const release = () => { demoBusy = false; };
+        const tick = setInterval(() => { if (run.state !== 'running') { clearInterval(tick); release(); } }, 1000);
+        return send(res, 202, { jobId: posted.jobId, state: 'running', customer: customer.accountId, tx: { post: posted.hash, postUrl: txUrl(posted.hash) }, status: `${PUBLIC_BASE}/v1/runs/${posted.jobId}` });
+      } catch (e) { demoBusy = false; emit('error', { message: e.message }); return send(res, e.status || 500, { error: e.message }); }
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {

@@ -1,0 +1,67 @@
+{
+  "tasks": [
+    {
+      "id": "login-ok",
+      "name": "Sign in with valid credentials reaches the secure area",
+      "startUrl": "https://the-internet.herokuapp.com/login",
+      "steps": [
+        {
+          "action": "fill",
+          "target": "#username",
+          "text": "tomsmith"
+        },
+        {
+          "action": "fill",
+          "target": "#password",
+          "text": "SuperSecretPassword!"
+        },
+        {
+          "action": "click",
+          "target": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "target": "#flash"
+        }
+      ],
+      "expect": [
+        {
+          "urlContains": "/secure"
+        },
+        {
+          "textContains": "You logged into a secure area"
+        }
+      ]
+    },
+    {
+      "id": "login-regression",
+      "name": "Sign in with a changed password is rejected with a clear message",
+      "startUrl": "https://the-internet.herokuapp.com/login",
+      "steps": [
+        {
+          "action": "fill",
+          "target": "#username",
+          "text": "tomsmith"
+        },
+        {
+          "action": "fill",
+          "target": "#password",
+          "text": "wrong-password"
+        },
+        {
+          "action": "click",
+          "target": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "target": "#flash"
+        }
+      ],
+      "expect": [
+        {
+          "judge": "The page tells the user their password is invalid and does not show the secure area."
+        }
+      ]
+    }
+  ]
+}

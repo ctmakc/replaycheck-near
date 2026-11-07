@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sign in · Northwind Supply</title><link rel="stylesheet" href="/shop/style.css"></head>
+<body><header><b>NORTHWIND SUPPLY</b><nav><a href="/shop/login">Account</a><a href="/">ReplayCheck</a></nav></header>
+<main><h1>Sign in</h1><p class="lead">Demo storefront used as a replay target. Any account other than the demo one is rejected.</p>
+<div id="flash" role="alert"></div>
+<form id="login" autocomplete="off">
+<label for="email">Email</label><input id="email" name="email" type="email" placeholder="you@example.com" required>
+<label for="password">Password</label><input id="password" name="password" type="password" required>
+<button type="submit">Sign in</button></form></main>
+<script>
+// Demo credentials: demo@northwind.test / replay-me. Everything else fails with a clear message.
+document.getElementById('login').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  const pw = document.getElementById('password').value;
+  const flash = document.getElementById('flash');
+  setTimeout(() => {
+    if (email === 'demo@northwind.test' && pw === 'replay-me') {
+      sessionStorage.setItem('nw_user', email); location.href = '/shop/account';
+    } else { flash.className = 'error'; flash.textContent = 'Your password is invalid. Check it and try again.'; }
+  }, 400);
+});
+</script></body></html>

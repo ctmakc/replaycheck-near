@@ -21,7 +21,7 @@ const ENV = process.env.REPLAYCHECK_ENV_FILE || '.env.near';
 const WASM = 'contracts/replay-market/res/replay_market.wasm';
 const NEAR = 10n ** 24n;
 const AGENT_PRICE = process.env.AGENT_PRICE_YOCTO || (NEAR / 20n).toString(); // 0.05 NEAR per job
-const SERVICE_URL = process.env.REPLAYCHECK_SERVICE_URL || 'http://127.0.0.1:8744/v1';
+const SERVICE_URL = process.env.REPLAYCHECK_SERVICE_URL || 'http://127.0.0.1:8746/v1';
 const redeploy = process.argv.includes('--redeploy');
 
 const provider = new JsonRpcProvider({ url: RPC });

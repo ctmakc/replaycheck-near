@@ -2,31 +2,31 @@
   "tasks": [
     {
       "id": "login-ok",
-      "name": "Sign in with valid credentials reaches the secure area",
-      "startUrl": "https://the-internet.herokuapp.com/login",
+      "name": "Sign in with the demo account reaches the account page",
+      "startUrl": "https://replaycheck-near.mmix.biz/shop/login",
       "steps": [
-        { "action": "fill", "target": "#username", "text": "tomsmith" },
-        { "action": "fill", "target": "#password", "text": "SuperSecretPassword!" },
+        { "action": "fill", "target": "#email", "text": "demo@northwind.test" },
+        { "action": "fill", "target": "#password", "text": "replay-me" },
         { "action": "click", "target": "button[type=submit]" },
-        { "action": "wait", "target": "#flash" }
+        { "action": "wait", "target": "#flash.success" }
       ],
       "expect": [
-        { "urlContains": "/secure" },
-        { "textContains": "You logged into a secure area" }
+        { "urlContains": "/shop/account" },
+        { "textContains": "Recent orders" }
       ]
     },
     {
       "id": "login-regression",
-      "name": "Sign in with a changed password is rejected with a clear message",
-      "startUrl": "https://the-internet.herokuapp.com/login",
+      "name": "A wrong password is rejected with a clear message",
+      "startUrl": "https://replaycheck-near.mmix.biz/shop/login",
       "steps": [
-        { "action": "fill", "target": "#username", "text": "tomsmith" },
+        { "action": "fill", "target": "#email", "text": "demo@northwind.test" },
         { "action": "fill", "target": "#password", "text": "wrong-password" },
         { "action": "click", "target": "button[type=submit]" },
-        { "action": "wait", "target": "#flash" }
+        { "action": "wait", "target": "#flash.error" }
       ],
       "expect": [
-        { "judge": "The page tells the user their password is invalid and does not show the secure area.", "fallbackTextContains": "Your password is invalid" }
+        { "judge": "The page tells the user their password is invalid and does not show the account page." }
       ]
     }
   ]

@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(job.deadline_ns, Some(20 + DEFAULT_TIMEOUT_NS));
 
         ctx("agent.testnet", 30, near(0));
-        m.deliver(0, H2.into(), 2, 2, Some("https://replay.example/r/0".into()));
+        let _ = m.deliver(0, H2.into(), 2, 2, Some("https://replay.example/r/0".into()));
         let job = m.get_job(0).unwrap();
         assert_eq!(job.status, JobStatus::Delivered);
         assert_eq!(job.report_hash.as_deref(), Some(H2));
@@ -499,7 +499,7 @@ mod tests {
         ctx("customer.testnet", 10, NearToken::from_millinear(500));
         m.post_job(acc("agent.testnet"), H1.into(), None);
         ctx("customer.testnet", 11, near(0));
-        m.refund(0);
+        let _ = m.refund(0);
         assert_eq!(m.get_job(0).unwrap().status, JobStatus::Refunded);
         assert_eq!(m.get_stats().refunded, 1);
     }
@@ -513,7 +513,7 @@ mod tests {
         ctx("agent.testnet", 20, near(0));
         m.accept_job(0);
         ctx("customer.testnet", 20 + 30 * 1_000_000_000, near(0));
-        m.refund(0);
+        let _ = m.refund(0);
     }
 
     #[test]
@@ -524,7 +524,7 @@ mod tests {
         ctx("agent.testnet", 20, near(0));
         m.accept_job(0);
         ctx("customer.testnet", 20 + 61 * 1_000_000_000, near(0));
-        m.refund(0);
+        let _ = m.refund(0);
         assert_eq!(m.get_job(0).unwrap().status, JobStatus::Refunded);
         ctx("agent.testnet", 20 + 62 * 1_000_000_000, near(0));
         let late = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.deliver(0, H2.into(), 1, 1, None)));
@@ -545,7 +545,7 @@ mod tests {
     fn pay_logs_receipt() {
         let mut m = market_with_agent();
         ctx("buyer.testnet", 10, NearToken::from_millinear(7));
-        m.pay(acc("worker.testnet"), "sess-abc123".into());
+        let _ = m.pay(acc("worker.testnet"), "sess-abc123".into());
         let logs = get_logs();
         let l = logs.iter().find(|l| l.contains("\"event\":\"pay\"")).expect("pay event");
         assert!(l.contains("\"payer\":\"buyer.testnet\""));
@@ -562,7 +562,7 @@ mod tests {
     fn pay_rejects_memo_with_spaces() {
         let mut m = market_with_agent();
         ctx("buyer.testnet", 10, NearToken::from_millinear(1));
-        m.pay(acc("worker.testnet"), "has space".into());
+        let _ = m.pay(acc("worker.testnet"), "has space".into());
     }
 
     #[test]

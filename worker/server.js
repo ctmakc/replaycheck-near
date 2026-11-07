@@ -65,7 +65,13 @@ async function runCommand(s, c) {
   const { page } = s;
   s.commands++;
   switch (c.action) {
-    case 'open': await page.goto(c.url, { waitUntil: 'domcontentloaded' }); return { url: page.url() };
+    case 'open': {
+      // Public demo targets on free hosting can take a while to wake up: give the first load
+      // 30 s and retry once before failing the step.
+      try { await page.goto(c.url, { waitUntil: 'domcontentloaded', timeout: 30000 }); }
+      catch (e) { if (!/Timeout/i.test(e.message)) throw e; await page.goto(c.url, { waitUntil: 'domcontentloaded', timeout: 30000 }); }
+      return { url: page.url() };
+    }
     case 'click': await loc(page, c.target).click(); return {};
     case 'fill': await loc(page, c.target).fill(String(c.text ?? '')); return {};
     case 'type': await loc(page, c.target).pressSequentially(String(c.text ?? ''), { delay: 20 }); return {};
@@ -104,7 +110,7 @@ async function judge({ expectation, pageText, url, title }) {
   ].join('\n');
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, format: 'json', options: { temperature: 0, num_predict: 200 }, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, format: 'json', keep_alive: '2h', options: { temperature: 0, num_predict: 200 }, messages: [{ role: 'user', content: prompt }] }),
     signal: AbortSignal.timeout(90e3),
   });
   if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);
@@ -161,6 +167,14 @@ const server = createServer(async (req, res) => {
     send(res, 500, { error: String(e.message).slice(0, 300) });
   }
 });
+
+// Load the judgement model once at start and keep it resident, so the first paid judge call is
+// seconds, not a minute of model loading.
+async function warmJudge() {
+  try { await fetch(`${OLLAMA}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: OLLAMA_MODEL, prompt: 'ok', keep_alive: '2h', options: { num_predict: 1 } }), signal: AbortSignal.timeout(120e3) }); console.error(`[worker] judge model ${OLLAMA_MODEL} is warm`); }
+  catch (e) { console.error(`[worker] judge model not available: ${e.message} (judge checks will fail until Ollama is up)`); }
+}
+warmJudge(); setInterval(warmJudge, 60 * 60e3).unref();
 
 server.listen(PORT, process.env.WORKER_BIND || '127.0.0.1', () =>
   console.error(`[worker] ${WORKER_ID} selling browser minutes at ${fmtNear(PRICE_PER_MINUTE, 6)} NEAR/min and judgements at ${fmtNear(PRICE_JUDGE, 6)} NEAR on ${network().slug}, 127.0.0.1:${PORT}`));
