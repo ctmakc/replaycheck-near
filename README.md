@@ -5,7 +5,7 @@ A QA agent that sells browser-replay runs for NEAR and pays its own supplier, an
 - **Live:** https://replaycheck-near.mmix.biz (testnet; the button on the page runs a full paid job in front of you, no wallet needed)
 - **Contract:** `market.rc-f44644.testnet` · agent `agent.rc-f44644.testnet` · worker `worker.rc-f44644.testnet`
 - **Tracks:** `agents` (Agent Economy), `business` (Autonomous Business), `open`
-- **Demo video:** `public/demo.mp4` (link in the X post)
+- **Demo video (86 s):** https://youtu.be/l8YPQ_JfFeQ · file `public/demo.mp4` · https://replaycheck-near.mmix.biz/demo.mp4
 - Built for NEAR Hackathon 2026 by INNOVA CONSULT LTD (Ottawa), solo. MIT.
 
 > **Second project, disclosed (Q-015):** the same author submitted [RedactGate audit anchor](https://github.com/ctmakc/redactgate/tree/near-hackathon) (privacy + security tracks). The two share nothing: different repositories, contracts, accounts and code.
